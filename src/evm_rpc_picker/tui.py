@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from platformdirs import user_cache_dir
-from textual import on, work
+from textual import events, on, work
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen
@@ -75,7 +75,13 @@ class RPCScreen(ModalScreen[str]):
     #button-row {
         height: 3;
         width: 100%;
+        margin-top: 1;
         content-align: center middle;
+    }
+
+    #button-row Button {
+        margin: 0 1;
+        min-width: 14;
     }
 
     #rpc-list:focus > ListItem.--highlight {
@@ -114,22 +120,18 @@ class RPCScreen(ModalScreen[str]):
         text-align: center;
     }
 
-    #cancel-btn {
-        margin-top: 1;
-        background: #f38ba8;
-        color: #11111b;
-    }
-    
-    #cancel-btn:hover {
-        background: #eba0ac;
-    }
-
     .hint {
         color: #6c7086;
         text-style: italic;
-        margin-top: 1;
     }
     """
+
+    BINDINGS = [
+        ("escape", "back", "Back"),
+        ("b", "back", "Back"),
+        ("r", "refresh", "Retry Latency Check"),
+        ("s", "select_focused", "Select Focused RPC"),
+    ]
 
     def __init__(self, chain: Dict[str, Any]):
         super().__init__()
@@ -147,9 +149,9 @@ class RPCScreen(ModalScreen[str]):
             yield Label(f"📡 RPC URLs for {self.chain['name']} (ID: {self.chain['chainId']})", id="rpc-title")
             yield ListView(id="rpc-list")
             with Horizontal(id="button-row"):
-                yield Button("Back", id="cancel-btn")
-                yield Static(expand=True)
-                yield Label("Select an RPC to set ETH_RPC_URL", classes="hint")
+                yield Button("[u]B[/u]ack [ESC]", id="back-btn", variant="error")
+                yield Button("[u]R[/u]etry", id="retry-btn", variant="primary")
+                yield Button("[u]S[/u]elect [⏎]", id="select-btn", variant="success")
 
     async def on_mount(self) -> None:
         list_view = self.query_one(ListView)
@@ -167,7 +169,7 @@ class RPCScreen(ModalScreen[str]):
         tasks = []
         list_view = self.query_one(ListView)
         
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=2.5) as client:
             for item in list_view.query(RPCListItem):
                 tasks.append(self.ping_rpc(client, item))
             await asyncio.gather(*tasks)
@@ -204,14 +206,35 @@ class RPCScreen(ModalScreen[str]):
         except Exception:
             item.update_latency(None)
 
+    def action_back(self) -> None:
+        self.dismiss("")
+
+    def action_refresh(self) -> None:
+        self.check_latencies()
+
+    def action_select_focused(self) -> None:
+        list_view = self.query_one(ListView)
+        if list_view.index is not None:
+            item = list_view.children[list_view.index]
+            if isinstance(item, RPCListItem):
+                self.dismiss(item.url)
+
+    @on(Button.Pressed, "#back-btn")
+    def on_back_click(self) -> None:
+        self.action_back()
+
+    @on(Button.Pressed, "#retry-btn")
+    def on_retry_click(self) -> None:
+        self.action_refresh()
+
+    @on(Button.Pressed, "#select-btn")
+    def on_select_click(self) -> None:
+        self.action_select_focused()
+
     @on(ListView.Selected)
     def on_rpc_selected(self, event: ListView.Selected) -> None:
         if isinstance(event.item, RPCListItem):
             self.dismiss(event.item.url)
-
-    @on(Button.Pressed, "#cancel-btn")
-    def on_cancel(self) -> None:
-        self.dismiss("")
 
 class ChainRPCPicker(App[str]):
     """TUI to search chains and select RPC URL."""
@@ -357,6 +380,20 @@ class ChainRPCPicker(App[str]):
         idx = int(event.row_key.value)
         chain = self.filtered_chains[idx]
         self.push_screen(RPCScreen(chain), self.on_rpc_selected)
+
+    def on_key(self, event: events.Key) -> None:
+        if event.key in ("up", "down", "pageup", "pagedown"):
+            if self.focused and self.focused.id == "search-input":
+                table = self.query_one(DataTable)
+                if event.key == "up":
+                    table.action_cursor_up()
+                elif event.key == "down":
+                    table.action_cursor_down()
+                elif event.key == "pageup":
+                    table.action_page_up()
+                elif event.key == "pagedown":
+                    table.action_page_down()
+                event.stop()
 
     def on_rpc_selected(self, rpc_url: str) -> None:
         if rpc_url:
