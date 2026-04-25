@@ -29,6 +29,22 @@ class RPCScreen(ModalScreen[str]):
         padding: 1;
     }
 
+    #rpc-header {
+        height: auto;
+        width: 100%;
+    }
+
+    #header-left {
+        width: 1fr;
+    }
+
+    #header-right {
+        width: auto;
+        text-align: right;
+        color: #6c7086;
+        text-style: italic;
+    }
+
     #rpc-list {
         height: 1fr;
         border: solid #313244;
@@ -108,8 +124,16 @@ class RPCScreen(ModalScreen[str]):
                 self.rpc_urls.append(url)
 
     def compose(self) -> ComposeResult:
+        name = self.chain.get("name", "Unknown")
+        cid = self.chain.get("chainId", "N/A")
+        short = self.chain.get("shortName", "N/A")
+        native = self.chain.get("nativeCurrency", {}).get("symbol", "N/A")
+
         with Container(id="rpc-container"):
-            yield Label(f"[bold #89b4fa]Select RPC for {self.chain.get('name', 'Unknown')}[/bold #89b4fa]")
+            with Horizontal(id="rpc-header"):
+                yield Label(f"[bold #89b4fa]{name}[/bold #89b4fa] (ID: {cid}, Short: {short}, Currency: {native})", id="header-left")
+                info_url = self.chain.get("infoURL", "")
+                yield Label(f"{info_url}", id="header-right")
             yield ListView(id="rpc-list")
             with Horizontal(classes="button-row"):
                 yield Button("[u]B[/u]ack [ESC]", id="btn-back", variant="error")
