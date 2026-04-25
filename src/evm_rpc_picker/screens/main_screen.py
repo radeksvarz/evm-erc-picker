@@ -99,6 +99,7 @@ class MainScreen(Screen[str]):
     BINDINGS = [
         ("enter", "submit", "Select"),
         ("tab", "focus_next", "Switch Focus"),
+        ("/", "focus_search", "Search"),
         ("escape", "app.quit", "Exit"),
         ("ctrl+r", "load_data", "Refresh Data"),
         ("ctrl+t", "toggle_filter", "Toggle Filter"),
@@ -149,6 +150,9 @@ class MainScreen(Screen[str]):
             self.query_one("#filter-status", Label).update(f"Filter: {mode_label}")
         except Exception:
             pass
+
+    def action_focus_search(self) -> None:
+        self.query_one(SearchInput).focus()
 
     def action_load_data(self) -> None:
         self.run_worker(self.load_data())

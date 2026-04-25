@@ -33,20 +33,22 @@ rpc-set
 ```
 
 ## Keyboard Shortcuts
-| Key | Action |
-|-----|--------|
-| `f` | Focus the search input |
-| `r` | Force refresh chain data from network |
-| `q` | Quit the application |
-| `Enter` | Select the highlighted chain or RPC |
-| `Esc` | Go back or close the RPC selection screen |
+
+| Key        | Action                                         |
+|------------|------------------------------------------------|
+| `Tab`      | **Switch Focus** (Search ↔ List ↔ System RPC)  |
+| `Enter`    | **Select** highlighted chain or RPC            |
+| `Ctrl + T` | **Toggle Filter** (All / Mainnet / Testnet)    |
+| `Ctrl + R` | **Refresh** data from network                  |
+| `Esc`      | **Exit** or go back from detail screen         |
+| `/`        | **Search** (focuses the search input)          |
 
 ## Caching Details
 The tool fetches data from `https://chainlist.org/rpcs.json` and caches it locally for 24 hours.
 
 - **Cache Location**: `~/.cache/evm-rpc-picker/chains.json`
 - **Cache Duration**: 24 hours.
-- **Force Refresh**: Press `r` inside the app or run `evm-rpc-picker --clear-cache`.
+- **Force Refresh**: Press `Ctrl + R` inside the app or run `evm-rpc-picker --clear-cache`.
 
 ## Development
 ```bash
