@@ -1,7 +1,16 @@
+import os
 import pytest
 from evm_rpc_picker.tui import ChainRPCPicker
 from evm_rpc_picker.widgets.search_input import SearchInput
 from evm_rpc_picker.widgets.chains_table import ChainsTable
+
+@pytest.fixture(autouse=True)
+def mock_cache_file(tmp_path):
+    # This fixture will run for every test and set a separate cache file
+    os.environ["EVM_RPC_PICKER_CACHE_FILE"] = str(tmp_path / "test_chains.json")
+    yield
+    if "EVM_RPC_PICKER_CACHE_FILE" in os.environ:
+        del os.environ["EVM_RPC_PICKER_CACHE_FILE"]
 
 @pytest.mark.asyncio
 async def test_app_focus_cycling():

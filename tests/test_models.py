@@ -1,3 +1,4 @@
+import os
 import pytest
 import respx
 import httpx
@@ -5,7 +6,10 @@ from evm_rpc_picker.models import fetch_chains, CHAINS_URL
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_fetch_chains_filtering():
+async def test_fetch_chains_filtering(tmp_path):
+    # Set temporary cache file for test
+    test_cache = tmp_path / "test_chains.json"
+    os.environ["EVM_RPC_PICKER_CACHE_FILE"] = str(test_cache)
     # Mock data with one valid RPC and one Infura/Alchemy (which should be filtered)
     mock_data = [
         {

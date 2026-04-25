@@ -155,7 +155,7 @@ class MainScreen(Screen[str]):
         self.query_one(SearchInput).focus()
 
     def action_load_data(self) -> None:
-        self.run_worker(self.load_data())
+        self.run_worker(self.load_data(force=True))
 
     def action_toggle_filter(self) -> None:
         modes = ["all", "mainnet", "testnet"]
@@ -169,13 +169,14 @@ class MainScreen(Screen[str]):
         search_input = self.query_one(SearchInput)
         self.on_search(Input.Changed(search_input, search_input.value))
 
-    async def load_data(self) -> None:
+    async def load_data(self, force: bool = False) -> None:
         """Load chains data from cache or network."""
-        cached = get_cached_chains()
-        if cached:
-            self.chains = cached
-            self.update_table(self.chains)
-            return
+        if not force:
+            cached = get_cached_chains()
+            if cached:
+                self.chains = cached
+                self.update_table(self.chains)
+                return
 
         self.app.notify("Fetching chain data...", title="Syncing")
         try:
