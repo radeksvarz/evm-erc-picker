@@ -111,17 +111,19 @@ class RPCScreen(ModalScreen[str]):
     def __init__(self, chain: Dict[str, Any]):
         super().__init__()
         self.chain = chain
-        self.rpc_urls = []
+        self.rpc_urls: List[Dict[str, str]] = []
         raw_rpc = chain.get("rpc", [])
         for r in raw_rpc:
             url = None
+            tracking = "unspecified"
             if isinstance(r, str):
                 url = r
             elif isinstance(r, dict):
                 url = r.get("url")
+                tracking = r.get("tracking", "unspecified")
             
             if url and not url.startswith("wss://"):
-                self.rpc_urls.append(url)
+                self.rpc_urls.append({"url": url, "tracking": tracking})
 
     def compose(self) -> ComposeResult:
         name = self.chain.get("name", "Unknown")
@@ -148,8 +150,8 @@ class RPCScreen(ModalScreen[str]):
         rpc_list.clear()
         
         items = []
-        for url in self.rpc_urls:
-            item = RPCListItem(url)
+        for r_info in self.rpc_urls:
+            item = RPCListItem(r_info["url"], tracking=r_info["tracking"])
             items.append(item)
             rpc_list.append(item)
             
@@ -164,12 +166,12 @@ class RPCScreen(ModalScreen[str]):
         # Sort by latency
         rpc_list = self.query_one("#rpc-list", ListView)
         # Get data from current items before clearing
-        items_data = [(item.url, item.latency) for item in items]
+        items_data = [(item.url, item.latency, item.tracking) for item in items]
         sorted_data = sorted(items_data, key=lambda x: (x[1] is None, x[1] or 9999))
         
         rpc_list.clear()
-        for url, latency in sorted_data:
-            new_item = RPCListItem(url)
+        for url, latency, tracking in sorted_data:
+            new_item = RPCListItem(url, tracking=tracking)
             rpc_list.append(new_item)
             new_item.update_latency(latency)
         

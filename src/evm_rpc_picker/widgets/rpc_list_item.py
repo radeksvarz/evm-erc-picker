@@ -11,16 +11,31 @@ class RPCListItem(ListItem):
     RPCListItem > Horizontal {
         height: 1;
     }
+    .privacy-symbol {
+        width: 3;
+        text-align: right;
+        margin-right: 1;
+    }
     """
-    def __init__(self, url: str):
+    def __init__(self, url: str, tracking: str = "unspecified"):
         super().__init__()
         self.url = url
+        self.tracking = tracking.lower()
         self.latency: Optional[float] = None
         self.latency_label = Label("--- ms", classes="latency-label")
 
     def compose(self):
+        # Privacy symbol mapping
+        if self.tracking == "none":
+            privacy_symbol = "[green]✔[/green]"
+        elif self.tracking == "yes":
+            privacy_symbol = "[red]✘[/red]"
+        else:
+            privacy_symbol = "[yellow]○[/yellow]"
+
         with Horizontal():
             yield Label(self.url, classes="url-label")
+            yield Label(f"{privacy_symbol} ", classes="privacy-symbol")
             yield self.latency_label
 
     def update_latency(self, latency_ms: Optional[float]) -> None:
