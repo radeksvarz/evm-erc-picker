@@ -6,6 +6,7 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Input, Label
 
+from ..config import ConfigManager
 from ..models import fetch_chains, get_cached_chains
 from ..widgets import ChainsTable, EnvStatus, SearchInput
 from .rpc_screen import RPCScreen
@@ -78,13 +79,17 @@ class MainScreen(Screen[str]):
         ("escape", "app.quit", "Exit"),
         ("ctrl+r", "load_data", "Refresh Data"),
         ("ctrl+t", "toggle_filter", "Toggle Filter"),
+        ("space", "toggle_favorite", "Fav (Project)"),
+        ("shift+space", "toggle_global_favorite", "Fav (Global)"),
+        ("c", "init_project", "Init Project"),
     ]
 
     def __init__(self):
         super().__init__()
+        self.config = ConfigManager()
         self.chains: List[Dict[str, Any]] = []
         self.filtered_chains: List[Dict[str, Any]] = []
-        self.filter_mode: str = "all"  # all, mainnet, testnet
+        self.filter_mode: str = "all"  # all, mainnet, testnet, favorites
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -100,7 +105,7 @@ class MainScreen(Screen[str]):
 
     async def on_mount(self) -> None:
         table = self.query_one(ChainsTable)
-        table.add_columns("Chain Name", "ID", "Short", "Currency")
+        table.add_columns("", "Chain Name", "ID", "Short", "Currency")
         table.cursor_type = "row"
         self.update_filter_status()
         self.query_one(SearchInput).focus()
@@ -120,14 +125,43 @@ class MainScreen(Screen[str]):
         self.run_worker(self.load_data(force=True))
 
     def action_toggle_filter(self) -> None:
-        modes = ["all", "mainnet", "testnet"]
+        modes = ["all", "mainnet", "testnet", "favorites"]
         current_idx = modes.index(self.filter_mode)
         self.filter_mode = modes[(current_idx + 1) % len(modes)]
-        
-        # Update UI
         self.update_filter_status()
-        
-        # Re-trigger search to update table
+        self.refresh_table()
+
+    def action_toggle_favorite(self) -> None:
+        table = self.query_one(ChainsTable)
+        if table.cursor_row is not None and 0 <= table.cursor_row < len(self.filtered_chains):
+            chain = self.filtered_chains[table.cursor_row]
+            chain_id = chain.get("chainId")
+            
+            if not self.config.local_config_exists():
+                self.app.notify("Local config not found. Press 'C' to create it.", title="Local Project", severity="warning")
+                return
+            
+            self.config.toggle_favorite(chain_id, is_global=False)
+            self.refresh_table()
+
+    def action_toggle_global_favorite(self) -> None:
+        table = self.query_one(ChainsTable)
+        if table.cursor_row is not None and 0 <= table.cursor_row < len(self.filtered_chains):
+            chain = self.filtered_chains[table.cursor_row]
+            chain_id = chain.get("chainId")
+            self.config.toggle_favorite(chain_id, is_global=True)
+            self.refresh_table()
+
+    def action_init_project(self) -> None:
+        if self.config.local_config_exists():
+            self.app.notify("Local config already exists.", severity="information")
+        else:
+            self.config.init_local_config()
+            self.app.notify("Created .rpc-picker.json", title="Project Initialized")
+            self.refresh_table()
+
+    def refresh_table(self) -> None:
+        """Trigger search update to refresh table contents and indicators."""
         search_input = self.query_one(SearchInput)
         self.on_search(Input.Changed(search_input, search_input.value))
 
@@ -151,12 +185,35 @@ class MainScreen(Screen[str]):
     def update_table(self, chains: List[Dict[str, Any]]) -> None:
         table = self.query_one(ChainsTable)
         table.clear()
-        self.filtered_chains = chains
-        for i, chain in enumerate(chains):
+        
+        fav_global = self.config.get_favorites(project_only=False)
+        fav_local = self.config.get_favorites(project_only=True)
+        
+        # Sort chains by priority: Local Fav > Global Fav > Others
+        def get_priority(chain):
+            cid = chain.get("chainId")
+            if cid in fav_local:
+                return 0
+            if cid in fav_global:
+                return 1
+            return 2
+            
+        sorted_chains = sorted(chains, key=lambda x: (get_priority(x), x.get("name", "").lower()))
+        self.filtered_chains = sorted_chains
+        
+        for i, chain in enumerate(sorted_chains):
+            cid = chain.get("chainId")
+            indicator = ""
+            if cid in fav_local:
+                indicator = "* [P]"
+            elif cid in fav_global:
+                indicator = "*"
+            
             native = chain.get("nativeCurrency", {}).get("symbol", "N/A")
             table.add_row(
+                indicator,
                 chain.get("name", "Unknown"),
-                str(chain.get("chainId", "N/A")),
+                str(cid),
                 chain.get("shortName", "N/A"),
                 native,
                 key=str(i)
@@ -169,10 +226,13 @@ class MainScreen(Screen[str]):
         filtered = self.chains
         
         # Apply network type filter
+        fav_all = self.config.get_favorites()
         if self.filter_mode == "mainnet":
             filtered = [c for c in filtered if not c.get("isTestnet", False)]
         elif self.filter_mode == "testnet":
             filtered = [c for c in filtered if c.get("isTestnet", False)]
+        elif self.filter_mode == "favorites":
+            filtered = [c for c in filtered if c.get("chainId") in fav_all]
         
         # Apply search query
         if query:
@@ -199,6 +259,7 @@ class MainScreen(Screen[str]):
     def on_key(self, event: Any) -> None:
         # Type-to-search: if typing printable chars outside search input, focus it
         if (event.character and len(event.character) == 1 and event.character.isprintable()
+            and event.character != " "
             and self.focused and self.focused.id != "search-input"):
             search_input = self.query_one(SearchInput)
             # Set value first, then focus (on_focus will handle cursor)

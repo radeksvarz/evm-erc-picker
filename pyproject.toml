@@ -7,6 +7,8 @@ dependencies = [
     "textual>=0.86.0",
     "httpx>=0.27.0",
     "platformdirs>=4.2.0",
+    "keyring>=25.0.0",
+    "cryptography>=42.0.0",
 ]
 requires-python = ">=3.12"
 readme = "README.md"
@@ -26,5 +28,6 @@ packages = ["src/evm_rpc_picker"]
 dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.1.0",
     "respx>=0.23.1",
 ]

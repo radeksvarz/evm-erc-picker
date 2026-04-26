@@ -99,7 +99,11 @@ async def test_filter_toggle():
         assert main_screen.filter_mode == "testnet"
         assert len(main_screen.filtered_chains) == 1
         assert main_screen.filtered_chains[0]["chainId"] == 11155111
-        
+        # Press Ctrl+T -> FAVORITES (0 chains by default)
+        await pilot.press("ctrl+t")
+        assert main_screen.filter_mode == "favorites"
+        assert len(main_screen.filtered_chains) == 0
+
         # Press Ctrl+T -> ALL again
         await pilot.press("ctrl+t")
         assert main_screen.filter_mode == "all"
@@ -240,7 +244,33 @@ async def test_type_to_search_no_overwrite():
         await pilot.pause()
         
         assert app.focused.value == "se"
-        assert len(app.screen.filtered_chains) == 1
+
+@pytest.mark.asyncio
+async def test_favorite_toggle():
+    app = ChainRPCPicker()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        main_screen = app.screen
+        
+        # Select first chain (Ethereum, ID 1)
+        await pilot.press("tab") # focus table
+        await pilot.press("shift+space") # global favorite
+        await pilot.pause()
+        
+        # Verify it's in global favorites
+        assert 1 in main_screen.config.get_favorites(project_only=False)
+        
+        # Toggle filter to favorites
+        await pilot.press("ctrl+t", "ctrl+t", "ctrl+t")
+        assert main_screen.filter_mode == "favorites"
+        assert len(main_screen.filtered_chains) == 1
+        assert main_screen.filtered_chains[0]["chainId"] == 1
+        
+        # Remove from favorites
+        await pilot.press("shift+space")
+        await pilot.pause()
+        assert 1 not in main_screen.config.get_favorites(project_only=False)
+        assert len(main_screen.filtered_chains) == 0
 
 @pytest.mark.asyncio
 async def test_slash_focuses_search_without_typing():
