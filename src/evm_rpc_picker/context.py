@@ -49,7 +49,15 @@ class ContextDetector:
                         # Extract keys like 'sepolia:' or '"mainnet":'
                         keys = re.findall(r"(\w+)\s*:", block)
                         # Filter out common hardhat keywords
-                        keywords = {"url", "accounts", "chainId", "gas", "gasPrice", "from", "timeout"}
+                        keywords = {
+                            "url",
+                            "accounts",
+                            "chainId",
+                            "gas",
+                            "gasPrice",
+                            "from",
+                            "timeout",
+                        }
                         networks.update(k for k in keys if k not in keywords)
                 except Exception:
                     pass

@@ -15,7 +15,7 @@ The application must support layered configuration loading:
 - **Interactions:**
     - `Space`: Toggles favorite in the local `.rpc-picker.toml`. If the file does not exist, the app prompts to create it.
     - `Shift+Space`: Toggles favorite in the global config.
-    - `CTRL+T`: Enhanced filter cycle: `All -> Mainnets -> Testnets -> Favorites`.
+    - `CTRL+F` / `CTRL+T`: Dual filtering system (Favorites toggle / Network Type cycle). Details in [filtering_system.md](./filtering_system.md).
 
 ## 3. Detailed Screen (RPCs)
 - **Visuals:**

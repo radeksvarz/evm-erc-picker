@@ -9,7 +9,6 @@ from textual.containers import Container, Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label, ListView
 
-from ..config import ConfigManager
 from ..context import ContextDetector
 from ..widgets import RPCListItem
 from .add_rpc_modal import AddRPCModal
@@ -107,6 +106,7 @@ class RPCScreen(ModalScreen[str]):
     """
     BINDINGS = [
         ("escape", "dismiss(None)", "Back"),
+        ("a", "add_rpc", "Add Custom"),
         ("v", "paste_rpc", "Paste"),
         ("e", "edit_rpc", "Edit"),
         ("r", "retry", "Retry"),
@@ -120,7 +120,7 @@ class RPCScreen(ModalScreen[str]):
 
     def _gather_rpcs(self) -> List[Dict[str, Any]]:
         rpcs = []
-        cm = ConfigManager()
+        cm = self.app.config
 
         # 1. Public RPCs
         raw_rpc = self.chain.get("rpc", [])
@@ -321,15 +321,24 @@ class RPCScreen(ModalScreen[str]):
     def action_retry(self) -> None:
         self.run_worker(self.refresh_rpcs())
 
+    def action_add_rpc(self) -> None:
+        """Open the modal to add a custom RPC."""
+        self.app.push_screen(
+            AddRPCModal(
+                self.chain.get("name", "Unknown"), self.chain.get("chainId", 0)
+            ),
+            self._on_rpc_added,
+        )
+
     def action_paste_rpc(self) -> None:
-        # Check if clipboard has a URL (simplified: just open modal)
-        self.app.push_screen(AddRPCModal(), self._on_rpc_added)
+        """Open the modal with current clipboard (planned)."""
+        self.action_add_rpc()
 
     def _on_rpc_added(self, data: Optional[dict]) -> None:
         if not data:
             return
 
-        cm = ConfigManager()
+        cm = self.app.config
         # Default to local if it exists, otherwise global
         is_global = not cm.local_config_exists()
 
@@ -341,17 +350,71 @@ class RPCScreen(ModalScreen[str]):
         self.run_worker(self.refresh_rpcs())
 
     def action_edit_rpc(self) -> None:
-        rpc_list = self.query_one("#rpc-list", ListView)
+        """Edit the highlighted custom RPC."""
+        rpc_list = self.query_one(ListView)
         if not rpc_list.highlighted_child:
             return
 
-        # Only allow editing custom RPCs (G/P)
         item = rpc_list.highlighted_child
-        if item.source == "public":
-            self.app.notify("Cannot edit public RPCs", severity="warning")
+        if not getattr(item, "id", None):
+            self.app.notify("Only custom RPCs can be edited", severity="warning")
             return
 
-        self.app.notify("Edit mode coming soon", severity="information")
+        # Prepare initial data
+        initial_data = {
+            "url": item.url,
+            "note": item.note,
+            "encrypted": item.encrypted,
+        }
+
+        # If it has secrets, we need to load them
+        if getattr(item, "has_secrets", False):
+            if item.encrypted:
+                # Ask for password first
+                self.app.push_screen(
+                    PasswordModal(),
+                    lambda p: self._on_password_for_edit(item, initial_data, p),
+                )
+            else:
+                self._on_password_for_edit(item, initial_data, None)
+        else:
+            self._open_edit_modal(item, initial_data)
+
+    def _on_password_for_edit(self, item, initial_data, password):
+        if item.encrypted and not password:
+            return
+
+        secrets = self.app.config.load_rpc_secret(item.id, password)
+        if secrets["status"] == "ok":
+            initial_data["secret_note"] = secrets.get("secret_note", "")
+            # If the original URL was base URL, restore full URL with key
+            if secrets.get("api_key"):
+                initial_data["url"] = f"{initial_data['url']}/{secrets['api_key']}"
+
+            self._open_edit_modal(item, initial_data)
+        elif secrets["status"] == "wrong_password":
+            self.app.notify("Wrong password", severity="error")
+
+    def _open_edit_modal(self, item, initial_data):
+        self.app.push_screen(
+            AddRPCModal(
+                self.chain.get("name", "Unknown"),
+                self.chain.get("chainId", 0),
+                initial_data,
+            ),
+            lambda d: self._handle_edit_result(item, d),
+        )
+
+    def _handle_edit_result(self, item, data):
+        if not data:
+            return
+
+        is_global = item.source == "global"
+        self.app.config.update_custom_rpc(
+            self.chain_id, item.id, data, is_global=is_global
+        )
+        self.app.notify("RPC updated")
+        self.refresh_list()
 
     @on(ListView.Selected)
     def on_rpc_selected_list(self, event: ListView.Selected) -> None:
@@ -374,7 +437,7 @@ class RPCScreen(ModalScreen[str]):
         if not password:
             return
 
-        cm = ConfigManager()
+        cm = self.app.config
         secret_data = cm.load_rpc_secret(item.rpc_id, password=password)
 
         if secret_data.get("status") == "ok":

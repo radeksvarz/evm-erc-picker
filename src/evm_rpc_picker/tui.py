@@ -1,5 +1,6 @@
 from textual.app import App
 
+from .config import ConfigManager
 from .screens import MainScreen
 
 
@@ -7,6 +8,10 @@ class ChainRPCPicker(App[str]):
     """TUI to search chains and select RPC URL."""
 
     TITLE = "EVM RPC Picker"
+
+    def __init__(self):
+        super().__init__()
+        self.config = ConfigManager()
 
     CSS = """
     Screen {

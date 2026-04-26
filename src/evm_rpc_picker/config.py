@@ -233,13 +233,69 @@ class ConfigManager:
         entry = {
             "id": rpc_id,
             "url": base_url if api_key else url,
-            "label": rpc_data.get("label", ""),
             "note": rpc_data.get("note", ""),
             "encrypted": is_encrypted,
             "has_secrets": bool(api_key or secret_note),
         }
 
         custom_rpcs[cid_str].append(entry)
+        config["custom_rpcs"] = custom_rpcs
+
+        if is_global:
+            self._save_toml(self.GLOBAL_CONFIG_FILE, config, is_global=True)
+            self.global_config = config
+        else:
+            self._save_toml(self.LOCAL_CONFIG_FILE, config, is_global=False)
+            self.local_config = config
+
+    def update_custom_rpc(
+        self,
+        chain_id: int,
+        rpc_id: str,
+        rpc_data: Dict[str, Any],
+        is_global: bool = False,
+    ):
+        """Update an existing custom RPC in the specified config."""
+        config = self.global_config if is_global else self.local_config
+        custom_rpcs = config.get("custom_rpcs", {})
+        cid_str = str(chain_id)
+
+        if cid_str not in custom_rpcs:
+            return
+
+        # Find the index of the RPC to update
+        index = -1
+        for i, rpc in enumerate(custom_rpcs[cid_str]):
+            if rpc["id"] == rpc_id:
+                index = i
+                break
+
+        if index == -1:
+            return
+
+        # 1. Handle Secrets (same as add_custom_rpc, but keep same rpc_id)
+        url = rpc_data.get("url", "")
+        base_url, api_key = self.smart_extract_key(url)
+        secret_note = rpc_data.get("secret_note", "")
+        password = rpc_data.get("password")
+        is_encrypted = password is not None
+
+        if api_key or secret_note:
+            self.save_rpc_secret(rpc_id, api_key, secret_note, password=password)
+        else:
+            # If we are removing secrets, we should delete from keyring
+            self.delete_secret(rpc_id)
+
+        # 2. Update public part
+        entry = {
+            "id": rpc_id,
+            "url": base_url if api_key else url,
+            "note": rpc_data.get("note", ""),
+            "encrypted": is_encrypted,
+            "has_secrets": bool(api_key or secret_note),
+        }
+
+        custom_rpcs[cid_str][index] = entry
         config["custom_rpcs"] = custom_rpcs
 
         if is_global:

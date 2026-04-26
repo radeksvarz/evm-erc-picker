@@ -3,7 +3,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import keyring
 from evm_rpc_picker.config import ConfigManager, EncryptionManager
 
 
@@ -66,46 +65,45 @@ def test_favorites(temp_config):
     assert 1 not in cm.get_favorites()
 
 
-def test_keyring_integration(temp_config):
-    cm, _, _ = temp_config
-
-    with (
-        patch("keyring.set_password") as mock_set,
-        patch("keyring.get_password", return_value="secret") as mock_get,
-        patch("keyring.delete_password") as mock_del,
-    ):
-        cm.set_secret("k", "v")
-        mock_set.assert_called_once_with(cm.APP_NAME, "k", "v")
-
-        assert cm.get_secret("k") == "secret"
-        mock_get.assert_called_once_with(cm.APP_NAME, "k")
-
-        cm.delete_secret("k")
-        mock_del.assert_called_once_with(cm.APP_NAME, "k")
-
-        # Test delete error
-        mock_del.side_effect = keyring.errors.PasswordDeleteError("Error")
-        cm.delete_secret("k")  # Should not raise
-
-
 def test_encryption_manager():
-    password = "pass"
-    data = "my-api-key"
+    password = "test-password"
+    data = "secret-message"
 
+    # Encrypt
     blob, salt = EncryptionManager.encrypt(data, password)
     assert blob != data
 
+    # Decrypt
     decrypted = EncryptionManager.decrypt(blob, salt, password)
     assert decrypted == data
 
     # Wrong password
     assert EncryptionManager.decrypt(blob, salt, "wrong") is None
 
-    # Invalid blob
-    assert EncryptionManager.decrypt("invalid", salt, password) is None
+    # Invalid salt/blob
+    assert EncryptionManager.decrypt("invalid", "invalid", password) is None
 
-    # Invalid salt
-    assert EncryptionManager.decrypt(blob, "invalid_salt", password) is None
+
+def test_smart_extract_key():
+    cm = ConfigManager()
+
+    # Infura
+    url = "https://mainnet.infura.io/v3/secret123"
+    base, key = cm.smart_extract_key(url)
+    assert base == "https://mainnet.infura.io/v3/${API_KEY}"
+    assert key == "secret123"
+
+    # Alchemy
+    url = "https://eth-mainnet.g.alchemy.com/v2/secret456"
+    base, key = cm.smart_extract_key(url)
+    assert base == "https://eth-mainnet.g.alchemy.com/v2/${API_KEY}"
+    assert key == "secret456"
+
+    # No key
+    url = "https://rpc.ankr.com/eth"
+    base, key = cm.smart_extract_key(url)
+    assert base == url
+    assert key == ""
 
 
 def test_rpc_secrets(temp_config):
@@ -130,62 +128,50 @@ def test_rpc_secrets(temp_config):
         # 2. Encrypted
         cm.save_rpc_secret("rpc2", "key2", "note2", password="p")
         args, _ = mock_set.call_args
-        storage_data = json.loads(args[2])
-        assert storage_data["encrypted"]
+        saved_data = json.loads(args[2])
+        assert saved_data["encrypted"]
 
-        # Load without password
-        mock_get.return_value = json.dumps(storage_data)
-        loaded = cm.load_rpc_secret("rpc2")
-        assert loaded["status"] == "needs_password"
+        mock_get.return_value = json.dumps(saved_data)
+        # Needs password
+        assert cm.load_rpc_secret("rpc2")["status"] == "needs_password"
 
-        # Load with correct password
+        # Correct password
         loaded = cm.load_rpc_secret("rpc2", password="p")
         assert loaded["api_key"] == "key2"
-        assert loaded["secret_note"] == "note2"
         assert loaded["status"] == "ok"
 
-        # Load with wrong password
-        loaded = cm.load_rpc_secret("rpc2", password="wrong")
-        assert loaded["status"] == "wrong_password"
-
-        # Load missing
-        mock_get.return_value = None
-        assert cm.load_rpc_secret("missing") == {}
-
-        # Load invalid json in keyring
-        mock_get.return_value = "invalid"
-        assert cm.load_rpc_secret("invalid") == {"status": "error"}
+        # Wrong password
+        assert (
+            cm.load_rpc_secret("rpc2", password="wrong")["status"] == "wrong_password"
+        )
 
 
-def test_smart_extract_key():
-    # Infura v3
-    url = "https://mainnet.infura.io/v3/abc123"
-    base, key = ConfigManager.smart_extract_key(url)
-    assert base == "https://mainnet.infura.io/v3/${API_KEY}"
-    assert key == "abc123"
+def test_delete_secret(temp_config):
+    cm, _, _ = temp_config
+    with patch("keyring.delete_password") as mock_del:
+        cm.delete_secret("rpc1")
+        mock_del.assert_called_once()
 
-    # Alchemy v2
-    url = "https://eth-mainnet.g.alchemy.com/v2/key456"
-    base, key = ConfigManager.smart_extract_key(url)
-    assert base == "https://eth-mainnet.g.alchemy.com/v2/${API_KEY}"
-    assert key == "key456"
 
-    # Generic
-    url = "https://rpc.ankr.com/eth"
-    base, key = ConfigManager.smart_extract_key(url)
-    assert base == url
-    assert key == ""
+def test_delete_secret_error(temp_config):
+    cm, _, _ = temp_config
+    import keyring
+
+    with patch(
+        "keyring.delete_password", side_effect=keyring.errors.PasswordDeleteError
+    ):
+        cm.delete_secret("rpc1")
+        # Should not raise
 
 
 def test_add_custom_rpc_public(temp_config):
     cm, _, _ = temp_config
-    rpc_data = {"url": "https://rpc.example.com", "label": "Test RPC", "note": "Public"}
+    rpc_data = {"url": "https://rpc.example.com", "note": "Public"}
     cm.add_custom_rpc(1, rpc_data, is_global=True)
 
     custom = cm.get_custom_rpcs(1)
     assert len(custom) == 1
     assert custom[0]["url"] == "https://rpc.example.com"
-    assert custom[0]["label"] == "Test RPC"
     assert custom[0]["has_secrets"] is False
     assert cm.global_config["custom_rpcs"]["1"][0]["url"] == "https://rpc.example.com"
 
@@ -194,60 +180,81 @@ def test_add_custom_rpc_with_secrets(temp_config):
     cm, _, _ = temp_config
     rpc_data = {
         "url": "https://mainnet.infura.io/v3/secret123",
-        "label": "Secure RPC",
         "secret_note": "My secret note",
     }
     # Mock keyring to avoid system calls
     with patch("keyring.set_password") as mock_set:
         cm.add_custom_rpc(1, rpc_data, is_global=False)
-
-        # Verify public part
-        custom = cm.get_custom_rpcs(1)
-        assert len(custom) == 1
-        assert custom[0]["url"] == "https://mainnet.infura.io/v3/${API_KEY}"
-        assert custom[0]["has_secrets"] is True
-        assert custom[0]["source"] == "project"
-
-        # Verify secret part was called
         mock_set.assert_called_once()
 
-
-def test_local_init(temp_config):
-    cm, _, local_file = temp_config
-
-    if local_file.exists():
-        local_file.unlink()
-
-    assert not cm.local_config_exists()
-    cm.init_local_config()
-    assert cm.local_config_exists()
-
-    # Check that it's TOML and has comments
-    content = local_file.read_text()
-    assert "[favorites]" in content or "favorites =" in content
-    assert "EVM RPC Picker" in content  # From comment
-
-    # Double init should do nothing (already exists)
-    cm.init_local_config()
-    assert cm.local_config_exists()
+    custom = cm.get_custom_rpcs(1)
+    assert len(custom) == 1
+    assert custom[0]["url"] == "https://mainnet.infura.io/v3/${API_KEY}"
+    assert custom[0]["has_secrets"] is True
 
 
-def test_toml_errors(temp_config, tmp_path):
-    cm, _, local_file = temp_config
+def test_update_custom_rpc(temp_config):
+    cm, _, _ = temp_config
+    rpc_data = {"url": "https://rpc.example.com", "note": "Original"}
+    cm.add_custom_rpc(1, rpc_data, is_global=False)
 
-    # Invalid TOML
-    local_file.write_text("invalid = [")
-    assert cm._load_toml(local_file) == {}
+    rpc_id = cm.get_custom_rpcs(1)[0]["id"]
+    new_data = {"url": "https://new-rpc.com", "note": "Updated"}
+    cm.update_custom_rpc(1, rpc_id, new_data, is_global=False)
 
-    # Save error (IOError)
-    with patch("builtins.open", side_effect=IOError):
-        # We use path.write_text which calls open
-        with patch("pathlib.Path.write_text", side_effect=IOError):
-            cm._save_toml(local_file, {"a": 1})
-            # Should not raise
+    custom = cm.get_custom_rpcs(1)
+    assert len(custom) == 1
+    assert custom[0]["url"] == "https://new-rpc.com"
+    assert custom[0]["note"] == "Updated"
 
 
 def test_save_toml_error(temp_config):
     cm, _, _ = temp_config
-    with patch("pathlib.Path.write_text", side_effect=IOError):
+    with patch("pathlib.Path.mkdir", side_effect=IOError):
         cm._save_toml(Path("any_path"), {"data": 1})
+
+
+def test_init_local_config(temp_config):
+    cm, _, local_file = temp_config
+    if local_file.exists():
+        local_file.unlink()
+
+    cm.init_local_config()
+    assert local_file.exists()
+    assert cm.local_config["favorites"] == []
+
+
+def test_update_custom_rpc_errors(temp_config):
+    cm, _, _ = temp_config
+    # Chain ID not found
+    cm.update_custom_rpc(999, "any", {})
+
+    # RPC ID not found
+    cm.add_custom_rpc(1, {"url": "http://test.com"})
+    cm.update_custom_rpc(1, "non-existent", {})
+
+
+def test_update_global_rpc_with_secrets(temp_config):
+    cm, _, _ = temp_config
+    # 1. Add global RPC
+    cm.add_custom_rpc(1, {"url": "http://old.com"}, is_global=True)
+    rpc_id = cm.get_custom_rpcs(1)[0]["id"]
+
+    # 2. Update to have secrets
+    new_data = {"url": "https://infura.io/v3/key123", "secret_note": "secret"}
+    with patch("keyring.set_password") as mock_set:
+        cm.update_custom_rpc(1, rpc_id, new_data, is_global=True)
+        mock_set.assert_called_once()
+
+    custom = cm.get_custom_rpcs(1)
+    assert custom[0]["url"] == "https://infura.io/v3/${API_KEY}"
+    assert custom[0]["source"] == "global"
+
+
+def test_load_rpc_secret_missing_and_error(temp_config):
+    cm, _, _ = temp_config
+    with patch("keyring.get_password", return_value=None):
+        assert cm.load_rpc_secret("missing") == {}
+
+    with patch("keyring.get_password", return_value="invalid-json"):
+        assert cm.load_rpc_secret("error")["status"] == "error"

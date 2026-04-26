@@ -1,3 +1,4 @@
+from typing import Optional
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -6,7 +7,21 @@ from textual.widgets import Button, Checkbox, Input, Label, TextArea
 
 
 class AddRPCModal(ModalScreen[dict]):
-    """Modal to add a new custom RPC."""
+    """Modal to add or edit a custom RPC."""
+
+    def __init__(
+        self, chain_name: str, chain_id: int, initial_data: Optional[dict] = None
+    ):
+        super().__init__()
+        self.chain_name = chain_name
+        self.chain_id = chain_id
+        self.initial_data = initial_data or {}
+        self.is_edit = bool(initial_data)
+
+    BINDINGS = [
+        ("escape", "cancel", "Cancel"),
+        ("ctrl+s", "save", "Save"),
+    ]
 
     DEFAULT_CSS = """
     AddRPCModal {
@@ -19,6 +34,14 @@ class AddRPCModal(ModalScreen[dict]):
         background: #1e1e2e;
         border: thick #89b4fa;
         padding: 1 2;
+    }
+
+    .modal-title {
+        text-align: center;
+        width: 100%;
+        text-style: bold;
+        margin-bottom: 1;
+        color: #89b4fa;
     }
 
     .field-label {
@@ -46,52 +69,79 @@ class AddRPCModal(ModalScreen[dict]):
         margin: 1 0;
     }
 
-    #button-row {
+    .modal-buttons {
+        width: 100%;
         height: auto;
-        align: center middle;
         margin-top: 1;
+        align: center middle;
     }
 
     Button {
         margin: 0 1;
     }
-    """
 
-    def __init__(self, initial_url: str = ""):
-        super().__init__()
-        self.initial_url = initial_url
+    .hidden {
+        display: none;
+    }
+    """
 
     def compose(self) -> ComposeResult:
         with Vertical(id="add-rpc-container"):
-            yield Label("[bold #cdd6f4]Add Custom RPC[/bold #cdd6f4]")
+            title = "Edit RPC" if self.is_edit else "Add Custom RPC"
+            yield Label(
+                f"{title} - {self.chain_name} ({self.chain_id})", classes="modal-title"
+            )
 
             yield Label("RPC URL", classes="field-label")
-            yield Input(self.initial_url, placeholder="https://...", id="url-input")
+            yield Input(
+                value=self.initial_data.get("url", ""),
+                placeholder="https://...",
+                id="url-input",
+            )
 
-            yield Label("Label (Optional)", classes="field-label")
-            yield Input(placeholder="My Private Node", id="label-input")
+            yield Checkbox(
+                "Encrypt RPC URL with password?",
+                value=self.initial_data.get("encrypted", False),
+                id="encrypt-check",
+            )
 
-            yield Label("Public Note", classes="field-label")
-            yield TextArea(id="note-input")
+            with Vertical(id="password-section", classes="hidden"):
+                yield Label("Password (required for encryption)", classes="field-label")
+                yield Input(placeholder="Password", password=True, id="password-input")
 
-            yield Label("Secret Note (Keyring)", classes="field-label")
-            yield TextArea(id="secret-note-input")
+            yield Label("Note @ config", classes="field-label")
+            yield TextArea(self.initial_data.get("note", ""), id="note-input")
 
-            yield Checkbox("Encrypt with password?", id="encrypt-check")
+            yield Label("Secret Note @ keyring", classes="field-label")
+            yield TextArea(
+                self.initial_data.get("secret_note", ""), id="secret-note-input"
+            )
 
-            yield Label("Password (only if Encrypt is checked)", classes="field-label")
-            yield Input(password=True, id="password-input")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Cancel [ESC]", id="cancel", variant="error")
+                btn_text = "Save Changes" if self.is_edit else "Add RPC"
+                yield Button(f"{btn_text} [Ctrl+S]", id="save", variant="success")
 
-            with Horizontal(id="button-row"):
-                yield Button("Cancel", variant="error", id="cancel")
-                yield Button("Save", variant="success", id="save")
+    def on_mount(self) -> None:
+        if self.initial_data.get("encrypted"):
+            self.query_one("#password-section").remove_class("hidden")
+
+    @on(Checkbox.Changed, "#encrypt-check")
+    def toggle_password(self, event: Checkbox.Changed) -> None:
+        section = self.query_one("#password-section")
+        if event.value:
+            section.remove_class("hidden")
+        else:
+            section.add_class("hidden")
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
 
     @on(Button.Pressed, "#cancel")
     def on_cancel(self) -> None:
-        self.dismiss(None)
+        self.action_cancel()
 
-    @on(Button.Pressed, "#save")
-    def on_save(self) -> None:
+    def action_save(self) -> None:
         url = self.query_one("#url-input", Input).value
         if not url:
             self.app.notify("URL is required", severity="error")
@@ -99,10 +149,13 @@ class AddRPCModal(ModalScreen[dict]):
 
         data = {
             "url": url,
-            "label": self.query_one("#label-input", Input).value,
             "note": self.query_one("#note-input", TextArea).text,
             "secret_note": self.query_one("#secret-note-input", TextArea).text,
             "encrypt": self.query_one("#encrypt-check", Checkbox).value,
             "password": self.query_one("#password-input", Input).value,
         }
         self.dismiss(data)
+
+    @on(Button.Pressed, "#save")
+    def on_save(self) -> None:
+        self.action_save()
