@@ -15,7 +15,7 @@
 ## 4. Quality & Workflow
 - 100% coverage for config/logic layers. Use `uv run pytest`.
 - Use `pilot.pause(0.5)` and mock network (via `respx`) and filesystem (via `tmp_path`) for isolation.
-- Run `uv run ruff check --fix .`, `uv run ruff format .`, `uv run mypy src/evm_rpc_picker` and `uv run pip-audit` before finishing for linting, types and security.
+- Run `uv run ruff check --fix .`, `uv run ruff format .`, `uv run mypy src/evm_rpc_picker`, `uv run pip-audit` and `uv run interrogate src/evm_rpc_picker` before finishing for linting, types, security and docstrings.
 
 ## 5. Architecture
 - **Layout**: `src/evm_rpc_picker/`.

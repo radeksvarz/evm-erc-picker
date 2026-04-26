@@ -125,9 +125,13 @@ class RPCScreen(ModalScreen[str]):
 
     def _gather_rpcs(self) -> list[dict[str, Any]]:
         rpcs = []
-        cm = self.app.config
+        rpcs.extend(self._gather_public_rpcs())
+        rpcs.extend(self._gather_custom_rpcs())
+        rpcs.extend(self._gather_context_rpcs())
+        return rpcs
 
-        # 1. Public RPCs
+    def _gather_public_rpcs(self) -> list[dict[str, Any]]:
+        rpcs = []
         raw_rpc = self.chain.get("rpc", [])
         for r in raw_rpc:
             url = None
@@ -149,47 +153,54 @@ class RPCScreen(ModalScreen[str]):
                         "needs_password": False,
                     }
                 )
+        return rpcs
 
-        # 2. Custom RPCs from config
+    def _gather_custom_rpcs(self) -> list[dict[str, Any]]:
+        rpcs = []
+        cm = self.app.config
         cid = self.chain.get("chainId")
-        if cid is not None:
-            custom = cm.get_custom_rpcs(int(cid))
-            for c in custom:
-                url = c.get("url", "")
-                is_encrypted = c.get("encrypted", False)
-                has_secrets = c.get("has_secrets", False)
-                rpc_id = str(c.get("id"))
-                if not rpc_id:
-                    continue
+        if cid is None:
+            return rpcs
 
-                display_url = url
-                final_url = url
-                needs_password = is_encrypted
+        custom = cm.get_custom_rpcs(int(cid))
+        for c in custom:
+            url = c.get("url", "")
+            is_encrypted = c.get("encrypted", False)
+            has_secrets = c.get("has_secrets", False)
+            rpc_id = str(c.get("id"))
+            if not rpc_id:
+                continue
 
-                if has_secrets:
-                    if not is_encrypted:
-                        # Try to fetch immediately
-                        secret_data = cm.load_rpc_secret(rpc_id)
-                        if secret_data.get("status") == "ok":
-                            key = secret_data.get("api_key", "")
-                            final_url = url.replace("${API_KEY}", key)
-                else:
-                    # Locked
-                    display_url = url.replace("${API_KEY}", "********")
+            display_url = url
+            final_url = url
+            needs_password = is_encrypted
 
-                rpcs.append(
-                    {
-                        "id": rpc_id,
-                        "url": final_url,
-                        "display_url": display_url,
-                        "tracking": "none",
-                        "source": c.get("source", "global"),
-                        "is_secret": has_secrets,
-                        "needs_password": needs_password,
-                    }
-                )
+            if has_secrets:
+                if not is_encrypted:
+                    # Try to fetch immediately
+                    secret_data = cm.load_rpc_secret(rpc_id)
+                    if secret_data.get("status") == "ok":
+                        key = secret_data.get("api_key", "")
+                        final_url = url.replace("${API_KEY}", key)
+            else:
+                # Locked
+                display_url = url.replace("${API_KEY}", "********")
 
-        # 3. Context RPCs (Foundry)
+            rpcs.append(
+                {
+                    "id": rpc_id,
+                    "url": final_url,
+                    "display_url": display_url,
+                    "tracking": "none",
+                    "source": c.get("source", "global"),
+                    "is_secret": has_secrets,
+                    "needs_password": needs_password,
+                }
+            )
+        return rpcs
+
+    def _gather_context_rpcs(self) -> list[dict[str, Any]]:
+        rpcs = []
         foundry = ContextDetector.get_foundry_rpc_endpoints()
         name = self.chain.get("name", "").lower()
         short = self.chain.get("shortName", "").lower()
@@ -205,7 +216,6 @@ class RPCScreen(ModalScreen[str]):
                         "needs_password": False,
                     }
                 )
-
         return rpcs
 
     def compose(self) -> ComposeResult:

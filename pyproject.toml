@@ -68,6 +68,7 @@ dev = [
     "ruff>=0.15.12",
     "mypy>=1.11.0",
     "pip-audit>=2.7.3",
+    "interrogate>=1.7.0",
 ]
 
 [tool.pytest.ini_options]
@@ -104,11 +105,31 @@ select = [
     "C4",  # flake8-comprehensions
     "UP",  # pyupgrade
     "S",   # bandit (security)
+    "C90", # mccabe complexity
 ]
 ignore = ["S101"] # Allow assert as it's used in pytest
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S105", "S106"] # Allow dummy passwords in tests
 "src/evm_rpc_picker/config.py" = ["S110"] # Allow silent failure for config/keyring
 "src/evm_rpc_picker/context.py" = ["S110"]
 "src/evm_rpc_picker/models.py" = ["S110"]
+
+[tool.interrogate]
+ignore-init-method = true
+ignore-init-module = false
+ignore-private = true
+ignore-semiprivate = false
+ignore-magic = true
+ignore-module = false
+ignore-nested-functions = false
+exclude = ["setup.py", "docs", "build", "tests"]
+ignore-regex = ["^get$", "^mock_.*", ".*BaseClass.*"]
+fail-under = 30
+color = true
+verbose = 0
+quiet = false
+whitelist-regex = []
