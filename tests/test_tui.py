@@ -205,6 +205,61 @@ async def test_env_status_widget_enter_select():
             assert app.return_value == rpc_url
 
 @pytest.mark.asyncio
+async def test_type_to_search_from_table():
+    app = ChainRPCPicker()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        # Move focus to table
+        await pilot.press("tab")
+        assert isinstance(app.focused, ChainsTable)
+        
+        # Type "s" (start of Sepolia)
+        await pilot.press("s")
+        await pilot.pause()
+        
+        # Focus should have jumped to search input
+        assert isinstance(app.focused, SearchInput)
+        assert app.focused.value == "s"
+        
+        # List should be filtered
+        main_screen = app.screen
+        assert len(main_screen.filtered_chains) == 1
+        assert main_screen.filtered_chains[0]["name"] == "Sepolia"
+
+@pytest.mark.asyncio
+async def test_type_to_search_no_overwrite():
+    app = ChainRPCPicker()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("tab") # Focus table
+        
+        # Type "s" then "e" (start of Sepolia)
+        await pilot.press("s")
+        await pilot.pause()
+        await pilot.press("e")
+        await pilot.pause()
+        
+        assert app.focused.value == "se"
+        assert len(app.screen.filtered_chains) == 1
+
+@pytest.mark.asyncio
+async def test_slash_focuses_search_without_typing():
+    app = ChainRPCPicker()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        # Move focus to table
+        await pilot.press("tab")
+        assert isinstance(app.focused, ChainsTable)
+        
+        # Press "/"
+        await pilot.press("/")
+        await pilot.pause()
+        
+        # Focus should have jumped but value should be EMPTY
+        assert isinstance(app.focused, SearchInput)
+        assert app.focused.value == ""
+
+@pytest.mark.asyncio
 async def test_quit_on_esc():
     app = ChainRPCPicker()
     async with app.run_test() as pilot:

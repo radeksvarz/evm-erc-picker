@@ -104,7 +104,7 @@ class MainScreen(Screen[str]):
         table.cursor_type = "row"
         self.update_filter_status()
         self.query_one(SearchInput).focus()
-        self.run_worker(self.load_data())
+        self.load_data()
 
     def update_filter_status(self) -> None:
         mode_label = self.filter_mode.upper()
@@ -131,6 +131,7 @@ class MainScreen(Screen[str]):
         search_input = self.query_one(SearchInput)
         self.on_search(Input.Changed(search_input, search_input.value))
 
+    @work
     async def load_data(self, force: bool = False) -> None:
         """Load chains data from cache or network."""
         if not force:
@@ -196,6 +197,18 @@ class MainScreen(Screen[str]):
         self.app.push_screen(RPCScreen(chain), self.on_rpc_selected)
 
     def on_key(self, event: Any) -> None:
+        # Type-to-search: if typing printable chars outside search input, focus it
+        if (event.character and len(event.character) == 1 and event.character.isprintable()
+            and self.focused and self.focused.id != "search-input"):
+            search_input = self.query_one(SearchInput)
+            # Set value first, then focus (on_focus will handle cursor)
+            if event.character != "/":
+                search_input.value = event.character
+            
+            search_input.focus()
+            event.stop()
+            return
+
         if event.key == "tab":
             self.focus_next()
             event.stop()
