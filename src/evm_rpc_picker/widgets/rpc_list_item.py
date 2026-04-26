@@ -1,5 +1,5 @@
 from typing import Optional
-from textual.containers import Horizontal
+from textual.containers import Container
 from textual.widgets import Label, ListItem
 
 class RPCListItem(ListItem):
@@ -8,13 +8,20 @@ class RPCListItem(ListItem):
         height: 1;
         padding: 0 1;
     }
-    RPCListItem > Horizontal {
+    .rpc-row-grid {
+        layout: grid;
+        grid-size: 3;
+        grid-columns: 1fr 5 12;
         height: 1;
     }
     .privacy-symbol {
-        width: 3;
+        width: 100%;
+        text-align: center;
+    }
+    .latency-label {
+        width: 100%;
         text-align: right;
-        margin-right: 1;
+        color: #fab387;
     }
     """
     def __init__(self, url: str, tracking: str = "unspecified"):
@@ -25,17 +32,19 @@ class RPCListItem(ListItem):
         self.latency_label = Label("--- ms", classes="latency-label")
 
     def compose(self):
-        # Privacy symbol mapping
+        # Final ASCII Privacy symbols with specific prefixes
         if self.tracking == "none":
-            privacy_symbol = "[green]✔[/green]"
+            privacy_symbol = "[green]#SEC[/green]"
         elif self.tracking == "yes":
-            privacy_symbol = "[red]✘[/red]"
+            privacy_symbol = "[red]!TRK[/red]"
+        elif self.tracking == "limited":
+            privacy_symbol = "[yellow]~LIM[/yellow]"
         else:
-            privacy_symbol = "[yellow]○[/yellow]"
+            privacy_symbol = "[dim]?UNK[/dim]"
 
-        with Horizontal():
+        with Container(classes="rpc-row-grid"):
             yield Label(self.url, classes="url-label")
-            yield Label(f"{privacy_symbol} ", classes="privacy-symbol")
+            yield Label(privacy_symbol, classes="privacy-symbol")
             yield self.latency_label
 
     def update_latency(self, latency_ms: Optional[float]) -> None:

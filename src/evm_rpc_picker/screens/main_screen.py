@@ -238,7 +238,16 @@ class MainScreen(Screen[str]):
             self.focus_next()
             event.stop()
             return
-            
+
+        if event.key == "right":
+            if self.focused and self.focused.id == "chain-table":
+                table = self.query_one(ChainsTable)
+                if table.cursor_row is not None and 0 <= table.cursor_row < len(self.filtered_chains):
+                    chain = self.filtered_chains[table.cursor_row]
+                    self.app.push_screen(RPCScreen(chain), self.on_rpc_selected)
+                event.stop()
+                return
+
         if event.key == "enter" and self.focused and self.focused.id == "env-status":
             if self.current_env_rpc:
                 self.app.exit(self.current_env_rpc)

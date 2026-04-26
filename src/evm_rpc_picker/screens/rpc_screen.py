@@ -52,12 +52,6 @@ class RPCScreen(ModalScreen[str]):
         margin: 1 0;
     }
 
-    .latency-label {
-        width: 12;
-        text-align: right;
-        color: #fab387;
-    }
-
     .url-label {
         width: 1fr;
     }
@@ -209,9 +203,9 @@ class RPCScreen(ModalScreen[str]):
             self.dismiss(rpc_list.highlighted_child.url)
 
     def on_key(self, event: Any) -> None:
-        if event.key == "escape" or event.key == "b":
+        if event.key in ("escape", "b", "left"):
             self.dismiss(None)
         elif event.key == "r":
             self.run_worker(self.refresh_rpcs())
-        elif event.key == "enter" or event.key == "s":
+        elif event.key in ("enter", "s", "right"):
             self.action_submit()

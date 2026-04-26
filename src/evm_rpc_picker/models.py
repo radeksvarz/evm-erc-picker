@@ -8,7 +8,7 @@ from platformdirs import user_cache_dir
 
 CACHE_DIR = Path(user_cache_dir("evm-rpc-picker"))
 DEFAULT_CACHE_FILE = CACHE_DIR / "chains.json"
-CHAINS_URL = "https://chainid.network/chains.json"
+CHAINS_URL = "https://chainlist.org/rpcs.json"
 
 def get_cache_file() -> Path:
     import os
