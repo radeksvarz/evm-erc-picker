@@ -35,6 +35,22 @@ After restarting your shell or sourcing the config, use the `set-rpc` command:
 set-rpc
 ```
 
+## Python Usage
+
+You can also use `evm-rpc-picker` as a module in your own Python scripts:
+
+```python
+from evm_rpc_picker import pick_rpc
+
+# This will open the TUI
+rpc_url = pick_rpc()
+
+if rpc_url:
+    print(f"Selected RPC: {rpc_url}")
+else:
+    print("User cancelled the selection")
+```
+
 ## Keyboard Shortcuts
 
 | Key        | Action                                         |
