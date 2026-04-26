@@ -1,6 +1,9 @@
 import asyncio
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..tui import ChainRPCPicker
 
 import httpx
 from textual import on
@@ -17,6 +20,8 @@ from .password_modal import PasswordModal
 
 class RPCScreen(ModalScreen[str]):
     """Screen to select RPC and check latency."""
+
+    app: "ChainRPCPicker"
 
     DEFAULT_CSS = """
     RPCScreen {
@@ -146,39 +151,43 @@ class RPCScreen(ModalScreen[str]):
                 )
 
         # 2. Custom RPCs from config
-        custom = cm.get_custom_rpcs(self.chain.get("chainId"))
-        for c in custom:
-            url = c.get("url", "")
-            is_encrypted = c.get("encrypted", False)
-            has_secrets = c.get("has_secrets", False)
-            rpc_id = c.get("id")
+        cid = self.chain.get("chainId")
+        if cid is not None:
+            custom = cm.get_custom_rpcs(int(cid))
+            for c in custom:
+                url = c.get("url", "")
+                is_encrypted = c.get("encrypted", False)
+                has_secrets = c.get("has_secrets", False)
+                rpc_id = str(c.get("id"))
+                if not rpc_id:
+                    continue
 
-            display_url = url
-            final_url = url
-            needs_password = is_encrypted
+                display_url = url
+                final_url = url
+                needs_password = is_encrypted
 
-            if has_secrets:
-                if not is_encrypted:
-                    # Try to fetch immediately
-                    secret_data = cm.load_rpc_secret(rpc_id)
-                    if secret_data.get("status") == "ok":
-                        key = secret_data.get("api_key", "")
-                        final_url = url.replace("${API_KEY}", key)
+                if has_secrets:
+                    if not is_encrypted:
+                        # Try to fetch immediately
+                        secret_data = cm.load_rpc_secret(rpc_id)
+                        if secret_data.get("status") == "ok":
+                            key = secret_data.get("api_key", "")
+                            final_url = url.replace("${API_KEY}", key)
                 else:
                     # Locked
                     display_url = url.replace("${API_KEY}", "********")
 
-            rpcs.append(
-                {
-                    "id": rpc_id,
-                    "url": final_url,
-                    "display_url": display_url,
-                    "tracking": "none",
-                    "source": c.get("source", "global"),
-                    "is_secret": has_secrets,
-                    "needs_password": needs_password,
-                }
-            )
+                rpcs.append(
+                    {
+                        "id": rpc_id,
+                        "url": final_url,
+                        "display_url": display_url,
+                        "tracking": "none",
+                        "source": c.get("source", "global"),
+                        "is_secret": has_secrets,
+                        "needs_password": needs_password,
+                    }
+                )
 
         # 3. Context RPCs (Foundry)
         foundry = ContextDetector.get_foundry_rpc_endpoints()
@@ -201,7 +210,7 @@ class RPCScreen(ModalScreen[str]):
 
     def compose(self) -> ComposeResult:
         name = self.chain.get("name", "Unknown")
-        cid = self.chain.get("chainId", "N/A")
+        cid = str(self.chain.get("chainId", "N/A"))
         short = self.chain.get("shortName", "N/A")
         native = self.chain.get("nativeCurrency", {}).get("symbol", "N/A")
 
@@ -257,9 +266,11 @@ class RPCScreen(ModalScreen[str]):
                     "tracking": item.tracking,
                     "source": item.source,
                     "is_secret": item.is_secret,
-                    "actual_url": getattr(item, "actual_url", item.url),
-                    "needs_password": getattr(item, "needs_password", False),
-                    "rpc_id": getattr(item, "rpc_id", None),
+                    "actual_url": item.actual_url,
+                    "needs_password": item.needs_password,
+                    "rpc_id": item.rpc_id,
+                    "note": item.note,
+                    "encrypted": item.encrypted,
                 }
             )
 
@@ -270,17 +281,20 @@ class RPCScreen(ModalScreen[str]):
         rpc_list.clear()
         for d in sorted_data:
             new_item = RPCListItem(
-                d["display_url"],
-                tracking=d["tracking"],
-                source=d["source"],
-                is_secret=d["is_secret"],
+                str(d["display_url"]),
+                tracking=str(d["tracking"]),
+                source=str(d["source"]),
+                is_secret=bool(d["is_secret"]),
             )
-            new_item.actual_url = d["actual_url"]
-            new_item.needs_password = d["needs_password"]
-            new_item.rpc_id = d["rpc_id"]
+            new_item.actual_url = str(d["actual_url"])
+            new_item.needs_password = bool(d["needs_password"])
+            new_item.rpc_id = cast(Optional[str], d["rpc_id"])
+            new_item.note = str(d.get("note", ""))
+            new_item.encrypted = bool(d.get("encrypted", False))
+            new_item.has_secrets = bool(d.get("is_secret", False))
 
             rpc_list.append(new_item)
-            new_item.update_latency(d["latency"])
+            new_item.update_latency(cast(Optional[float], d["latency"]))
 
         if rpc_list.children:
             rpc_list.index = 0
@@ -342,7 +356,9 @@ class RPCScreen(ModalScreen[str]):
         # Default to local if it exists, otherwise global
         is_global = not cm.local_config_exists()
 
-        cm.add_custom_rpc(self.chain.get("chainId"), data, is_global=is_global)
+        cid = self.chain.get("chainId")
+        if cid is not None:
+            cm.add_custom_rpc(int(cid), data, is_global=is_global)
         self.app.notify("Custom RPC added", title="Success")
 
         # Refresh the screen data and UI
@@ -356,19 +372,19 @@ class RPCScreen(ModalScreen[str]):
             return
 
         item = rpc_list.highlighted_child
-        if not getattr(item, "id", None):
+        if not isinstance(item, RPCListItem) or not item.rpc_id:
             self.app.notify("Only custom RPCs can be edited", severity="warning")
             return
 
         # Prepare initial data
-        initial_data = {
+        initial_data: Dict[str, Any] = {
             "url": item.url,
             "note": item.note,
             "encrypted": item.encrypted,
         }
 
         # If it has secrets, we need to load them
-        if getattr(item, "has_secrets", False):
+        if item.has_secrets:
             if item.encrypted:
                 # Ask for password first
                 self.app.push_screen(
@@ -380,11 +396,16 @@ class RPCScreen(ModalScreen[str]):
         else:
             self._open_edit_modal(item, initial_data)
 
-    def _on_password_for_edit(self, item, initial_data, password):
+    def _on_password_for_edit(
+        self, item: RPCListItem, initial_data: Dict[str, Any], password: Optional[str]
+    ) -> None:
         if item.encrypted and not password:
             return
 
-        secrets = self.app.config.load_rpc_secret(item.id, password)
+        if not item.rpc_id:
+            return
+
+        secrets = self.app.config.load_rpc_secret(item.rpc_id, password)
         if secrets["status"] == "ok":
             initial_data["secret_note"] = secrets.get("secret_note", "")
             # If the original URL was base URL, restore full URL with key
@@ -395,26 +416,31 @@ class RPCScreen(ModalScreen[str]):
         elif secrets["status"] == "wrong_password":
             self.app.notify("Wrong password", severity="error")
 
-    def _open_edit_modal(self, item, initial_data):
+    def _open_edit_modal(self, item: RPCListItem, initial_data: Dict[str, Any]) -> None:
         self.app.push_screen(
             AddRPCModal(
                 self.chain.get("name", "Unknown"),
-                self.chain.get("chainId", 0),
+                int(self.chain.get("chainId", 0)),
                 initial_data,
             ),
             lambda d: self._handle_edit_result(item, d),
         )
 
-    def _handle_edit_result(self, item, data):
+    def _handle_edit_result(
+        self, item: RPCListItem, data: Optional[Dict[str, Any]]
+    ) -> None:
         if not data:
+            return
+
+        if not item.rpc_id:
             return
 
         is_global = item.source == "global"
         self.app.config.update_custom_rpc(
-            self.chain_id, item.id, data, is_global=is_global
+            int(self.chain.get("chainId", 0)), item.rpc_id, data, is_global=is_global
         )
         self.app.notify("RPC updated")
-        self.refresh_list()
+        self.run_worker(self.refresh_rpcs())
 
     @on(ListView.Selected)
     def on_rpc_selected_list(self, event: ListView.Selected) -> None:
@@ -422,15 +448,16 @@ class RPCScreen(ModalScreen[str]):
 
     def action_submit(self) -> None:
         rpc_list = self.query_one("#rpc-list", ListView)
-        # print(f"DEBUG: highlighted_child={rpc_list.highlighted_child}, index={rpc_list.index}")
         if rpc_list.highlighted_child:
             item = rpc_list.highlighted_child
-            if getattr(item, "needs_password", False):
+            if not isinstance(item, RPCListItem):
+                return
+            if item.needs_password:
                 self.app.push_screen(
                     PasswordModal(), lambda p: self._on_password_provided(item, p)
                 )
             else:
-                url = getattr(item, "actual_url", item.url)
+                url = item.actual_url
                 self.dismiss(url)
 
     def _on_password_provided(self, item: RPCListItem, password: Optional[str]) -> None:
@@ -438,6 +465,8 @@ class RPCScreen(ModalScreen[str]):
             return
 
         cm = self.app.config
+        if not item.rpc_id:
+            return
         secret_data = cm.load_rpc_secret(item.rpc_id, password=password)
 
         if secret_data.get("status") == "ok":

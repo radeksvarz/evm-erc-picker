@@ -1,16 +1,13 @@
 import json
-import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, cast
 
 import keyring
 import tomlkit
 from platformdirs import user_config_dir
 
 from .encryption import EncryptionManager
-
-
 
 
 class ConfigManager:
@@ -21,7 +18,7 @@ class ConfigManager:
     GLOBAL_CONFIG_FILE = GLOBAL_CONFIG_DIR / "config.toml"
     LOCAL_CONFIG_FILE = Path("./.rpc-picker.toml")
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.global_config: Dict[str, Any] = self._load_toml(self.GLOBAL_CONFIG_FILE)
         self.local_config: Dict[str, Any] = self._load_toml(self.LOCAL_CONFIG_FILE)
         self.encryption_manager = EncryptionManager()
@@ -45,7 +42,7 @@ class ConfigManager:
             favorites.update(self.global_config.get("favorites", []))
         return favorites
 
-    def toggle_favorite(self, chain_id: int, is_global: bool = False):
+    def toggle_favorite(self, chain_id: int, is_global: bool = False) -> None:
         """Toggle a favorite chain ID in the specified config."""
         config = self.global_config if is_global else self.local_config
 
@@ -65,7 +62,7 @@ class ConfigManager:
 
     # --- Secrets ---
 
-    def set_secret(self, key_name: str, secret_value: str):
+    def set_secret(self, key_name: str, secret_value: str) -> None:
         """Store a secret value in the system keyring."""
         keyring.set_password(self.APP_NAME, key_name, secret_value)
 
@@ -73,7 +70,7 @@ class ConfigManager:
         """Retrieve a secret value from the system keyring."""
         return keyring.get_password(self.APP_NAME, key_name)
 
-    def delete_secret(self, key_name: str):
+    def delete_secret(self, key_name: str) -> None:
         """Remove a secret from the system keyring."""
         try:
             keyring.delete_password(self.APP_NAME, key_name)
@@ -86,7 +83,7 @@ class ConfigManager:
         api_key: str,
         secret_note: str = "",
         password: Optional[str] = None,
-    ):
+    ) -> None:
         """Save API key and secret note to keyring, optionally encrypted with a password."""
         data = {
             "api_key": api_key,
@@ -122,12 +119,12 @@ class ConfigManager:
                 if not decrypted_json:
                     return {"status": "wrong_password", "encrypted": True}
 
-                result = json.loads(decrypted_json)
+                result = cast(Dict[str, Any], json.loads(decrypted_json))
                 result["status"] = "ok"
                 return result
 
             data["status"] = "ok"
-            return data
+            return cast(Dict[str, Any], data)
         except Exception:
             return {"status": "error"}
 
@@ -156,7 +153,7 @@ class ConfigManager:
         for rpc in local_rpcs:
             rpc["source"] = "project"
 
-        return local_rpcs + global_rpcs
+        return cast(List[Dict[str, Any]], local_rpcs + global_rpcs)
 
     def add_custom_rpc(
         self,
@@ -164,7 +161,7 @@ class ConfigManager:
         rpc_data: Dict[str, Any],
         is_global: bool = False,
         password: Optional[str] = None,
-    ):
+    ) -> None:
         """Add a custom RPC to the specified config, handling secrets."""
         config = self.global_config if is_global else self.local_config
 
@@ -213,7 +210,7 @@ class ConfigManager:
         rpc_id: str,
         rpc_data: Dict[str, Any],
         is_global: bool = False,
-    ):
+    ) -> None:
         """Update an existing custom RPC in the specified config."""
         config = self.global_config if is_global else self.local_config
         custom_rpcs = config.get("custom_rpcs", {})
@@ -264,7 +261,9 @@ class ConfigManager:
             self._save_toml(self.LOCAL_CONFIG_FILE, config, is_global=False)
             self.local_config = config
 
-    def _save_toml(self, path: Path, data: Dict[str, Any], is_global: bool = False):
+    def _save_toml(
+        self, path: Path, data: Dict[str, Any], is_global: bool = False
+    ) -> None:
         """Save configuration to a TOML file with comments."""
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -277,10 +276,12 @@ class ConfigManager:
             for key, value in data.items():
                 # For multiline strings, tomlkit handles them well if they contain \n
                 doc[key] = value
-                if key == "favorites":
-                    doc[key].comment("List of Chain IDs for pinned networks")
-                elif key == "custom_rpcs":
-                    doc[key].comment("Custom RPC endpoints")
+                item = doc.get(key)
+                if item is not None and hasattr(item, "comment"):
+                    if key == "favorites":
+                        item.comment("List of Chain IDs for pinned networks")
+                    elif key == "custom_rpcs":
+                        item.comment("Custom RPC endpoints")
 
             path.write_text(tomlkit.dumps(doc))
         except Exception:
@@ -290,9 +291,9 @@ class ConfigManager:
         """Check if local config file exists in CWD."""
         return self.LOCAL_CONFIG_FILE.exists()
 
-    def init_local_config(self):
+    def init_local_config(self) -> None:
         """Create an empty local config file."""
         if not self.local_config_exists():
-            default_config = {"favorites": [], "custom_rpcs": {}}
+            default_config: Dict[str, Any] = {"favorites": [], "custom_rpcs": {}}
             self._save_toml(self.LOCAL_CONFIG_FILE, default_config)
             self.local_config = default_config

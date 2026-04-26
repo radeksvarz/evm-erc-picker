@@ -1,4 +1,5 @@
 from typing import Optional
+from textual.app import ComposeResult
 from textual.containers import Container
 from textual.widgets import Label, ListItem
 
@@ -32,7 +33,7 @@ class RPCListItem(ListItem):
         tracking: str = "unspecified",
         source: str = "public",
         is_secret: bool = False,
-    ):
+    ) -> None:
         super().__init__()
         self.url = url
         self.tracking = tracking.lower()
@@ -40,8 +41,14 @@ class RPCListItem(ListItem):
         self.is_secret = is_secret
         self.latency: Optional[float] = None
         self.latency_label = Label("--- ms", classes="latency-label")
+        self.actual_url: str = url
+        self.needs_password: bool = False
+        self.rpc_id: Optional[str] = None
+        self.note: str = ""
+        self.encrypted: bool = False
+        self.has_secrets: bool = False
 
-    def compose(self):
+    def compose(self) -> ComposeResult:
         # Final ASCII Privacy symbols with specific prefixes
         if self.tracking == "none":
             privacy_symbol = "[green]#SEC[/green]"

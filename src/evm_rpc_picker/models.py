@@ -74,7 +74,7 @@ async def fetch_chains() -> List[Dict[str, Any]]:
         return chains
 
 
-def clear_cache():
+def clear_cache() -> None:
     """Remove the local cache file."""
     cache_file = get_cache_file()
     if cache_file.exists():

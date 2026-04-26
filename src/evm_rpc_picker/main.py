@@ -2,7 +2,7 @@ import argparse
 from evm_rpc_picker.tui import ChainRPCPicker
 
 
-def print_init_snippet():
+def print_init_snippet() -> None:
     snippet = """
 rpc-set() {
     local rpc=$(uvx evm-rpc-picker)
@@ -14,7 +14,7 @@ rpc-set() {
     print(snippet.strip())
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="EVM RPC Picker - TUI tool to select EVM RPC URLs"
     )
@@ -39,7 +39,7 @@ def main():
         clear_cache()
         # We don't print anything to stdout to avoid messing up the TUI/shell capture
 
-    app = ChainRPCPicker()
+    app: ChainRPCPicker = ChainRPCPicker()
     # Run the app. The app.exit(result) call will return 'result' here.
     result = app.run()
 

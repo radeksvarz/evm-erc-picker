@@ -1,8 +1,9 @@
 import os
 import time
 import httpx
-from typing import Optional
+from typing import Any, Optional
 from textual import work
+from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Label
 
@@ -37,30 +38,30 @@ class EnvStatus(Horizontal):
     }
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.can_focus = True
         self.current_rpc: Optional[str] = os.environ.get("ETH_RPC_URL")
         self.status_label = Label(id="env-status-label")
         self.latency_label = Label("--- ms", id="env-latency-label")
 
-    def compose(self):
+    def compose(self) -> ComposeResult:
         yield self.status_label
         yield self.latency_label
 
-    def on_mount(self):
+    def on_mount(self) -> None:
         self.update_status()
         if self.current_rpc:
             self.check_latency()
 
-    def update_status(self):
+    def update_status(self) -> None:
         display_rpc = self.current_rpc or "not set"
         self.status_label.update(
             f" Current ETH_RPC_URL: [bold #89b4fa]{display_rpc}[/bold #89b4fa]"
         )
 
     @work(exclusive=True)
-    async def check_latency(self):
+    async def check_latency(self) -> None:
         if not self.current_rpc:
             return
 

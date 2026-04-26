@@ -1,7 +1,7 @@
 import os
 import json
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from evm_rpc_picker.tui import ChainRPCPicker
 from evm_rpc_picker.widgets.search_input import SearchInput
 from evm_rpc_picker.widgets.chains_table import ChainsTable
@@ -45,7 +45,7 @@ def mock_cache_file(tmp_path):
     local_dir = tmp_path / "local"
     local_dir.mkdir()
     local_file = local_dir / ".rpc-picker.toml"
-    
+
     # Create an empty local config to avoid ConfirmModal
     local_file.write_text("[favorites]\n")
 
@@ -149,12 +149,13 @@ async def test_rpc_selection_and_exit():
         await pilot.pause(0.5)
 
         from textual.widgets import ListView
+
         list_view = app.screen.query_one(ListView)
         if list_view.index is None and len(list_view) > 0:
             list_view.index = 0
-            
+
         list_view.focus()
-        
+
         with patch.object(app, "exit") as mock_exit:
             await app.screen.run_action("submit")
             await pilot.pause(0.2)

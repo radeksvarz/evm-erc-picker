@@ -1,6 +1,9 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
-from textual import on
+if TYPE_CHECKING:
+    from ..tui import ChainRPCPicker
+
+from textual import events, on
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal
 from textual.binding import Binding
@@ -16,6 +19,8 @@ from .rpc_screen import RPCScreen
 
 class MainScreen(Screen[str]):
     """Main screen for searching and listing chains."""
+
+    app: "ChainRPCPicker"
 
     DEFAULT_CSS = """
     #search-container {
@@ -87,7 +92,7 @@ class MainScreen(Screen[str]):
         ("escape", "app.quit", "Exit"),
     ]
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.chains: List[Dict[str, Any]] = []
         self.filtered_chains: List[Dict[str, Any]] = []
@@ -142,6 +147,8 @@ class MainScreen(Screen[str]):
         ):
             chain = self.filtered_chains[table.cursor_row]
             chain_id = chain.get("chainId")
+            if chain_id is None:
+                return
 
             if not self.app.config.local_config_exists():
                 self.app.push_screen(
@@ -150,7 +157,7 @@ class MainScreen(Screen[str]):
                 )
                 return
 
-            self.app.config.toggle_favorite(chain_id, is_global=False)
+            self.app.config.toggle_favorite(int(chain_id), is_global=False)
             self.refresh_table()
 
     def action_toggle_global_favorite(self) -> None:
@@ -160,8 +167,9 @@ class MainScreen(Screen[str]):
         ):
             chain = self.filtered_chains[table.cursor_row]
             chain_id = chain.get("chainId")
-            self.app.config.toggle_favorite(chain_id, is_global=True)
-            self.refresh_table()
+            if chain_id is not None:
+                self.app.config.toggle_favorite(int(chain_id), is_global=True)
+                self.refresh_table()
 
     def action_init_project(self) -> None:
         if self.app.config.local_config_exists():
@@ -208,7 +216,7 @@ class MainScreen(Screen[str]):
         }
 
         # Sort: Local > Global Favorite > Others
-        def sort_key(c):
+        def sort_key(c: Dict[str, Any]) -> int:
             cid = c.get("chainId")
             if cid in fav_local or cid in context_ids:
                 return 0
@@ -283,7 +291,7 @@ class MainScreen(Screen[str]):
         self.filtered_chains = filtered
         self.update_filter_status()
         self.update_table(filtered)
-        
+
         # Ensure cursor is visible if we have results
         table = self.query_one(ChainsTable)
         if filtered and (table.cursor_row is None or table.cursor_row >= len(filtered)):
@@ -292,15 +300,20 @@ class MainScreen(Screen[str]):
     @on(DataTable.RowSelected, "#chain-table")
     def on_row_selected(self, event: DataTable.RowSelected) -> None:
         """Handle row selection (Enter) to open RPC screen."""
-        idx = int(event.row_key.value)
-        if 0 <= idx < len(self.filtered_chains):
-            chain = self.filtered_chains[idx]
-            self.app.push_screen(RPCScreen(chain), self._on_rpc_selected)
+        if event.row_key.value is not None:
+            idx = int(event.row_key.value)
+            if 0 <= idx < len(self.filtered_chains):
+                chain = self.filtered_chains[idx]
+                self.app.push_screen(RPCScreen(chain), self._on_rpc_selected)
 
-    def on_key(self, event) -> None:
+    def _on_rpc_selected(self, rpc_url: Optional[str]) -> None:
+        if rpc_url:
+            self.app.exit(rpc_url)
+
+    def on_key(self, event: events.Key) -> None:
         """Handle alpha-numeric keys to focus and type into search."""
         if event.is_printable and len(event.key) == 1:
-            search_input = self.query_one("#search-input")
+            search_input = self.query_one(SearchInput)
             if not search_input.has_focus:
                 search_input.focus()
                 search_input.value += event.key
@@ -309,11 +322,7 @@ class MainScreen(Screen[str]):
                 # Actually, if we focus it here, the event might bubble up or be handled by search.
                 event.stop()
 
-    def _on_rpc_selected(self, rpc_url: str) -> None:
-        if rpc_url:
-            self.app.exit(rpc_url)
-
-    def _on_init_confirm(self, confirmed: bool) -> None:
+    def _on_init_confirm(self, confirmed: Optional[bool]) -> None:
         if confirmed:
             self.app.config.init_local_config()
             self.app.notify("Created .rpc-picker.toml")

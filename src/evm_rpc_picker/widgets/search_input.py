@@ -11,7 +11,7 @@ class SearchInput(Input):
 
     def on_focus(self) -> None:
         # Clear selection after focus logic has run
-        def clear_selection():
+        def clear_selection() -> None:
             self.selection = self.selection.__class__(len(self.value), len(self.value))
             self.cursor_position = len(self.value)
 

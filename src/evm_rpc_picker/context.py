@@ -17,7 +17,10 @@ class ContextDetector:
         try:
             with open(path, "rb") as f:
                 data = tomllib.load(f)
-                return data.get("rpc_endpoints", {})
+                endpoints = data.get("rpc_endpoints", {})
+                if isinstance(endpoints, dict):
+                    return {str(k): str(v) for k, v in endpoints.items()}
+                return {}
         except Exception:
             return {}
 
@@ -31,7 +34,7 @@ class ContextDetector:
     @staticmethod
     def get_hardhat_networks() -> Set[str]:
         """Heuristic detection of network names in hardhat config."""
-        networks = set()
+        networks: Set[str] = set()
         for ext in ["js", "ts"]:
             path = Path(f"./hardhat.config.{ext}")
             if path.exists():
