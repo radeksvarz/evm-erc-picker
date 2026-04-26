@@ -1,11 +1,11 @@
 import os
 import time
-import asyncio
 import httpx
 from typing import Optional
 from textual import work
 from textual.containers import Horizontal
 from textual.widgets import Label
+
 
 class EnvStatus(Horizontal):
     DEFAULT_CSS = """
@@ -55,7 +55,9 @@ class EnvStatus(Horizontal):
 
     def update_status(self):
         display_rpc = self.current_rpc or "not set"
-        self.status_label.update(f" Current ETH_RPC_URL: [bold #89b4fa]{display_rpc}[/bold #89b4fa]")
+        self.status_label.update(
+            f" Current ETH_RPC_URL: [bold #89b4fa]{display_rpc}[/bold #89b4fa]"
+        )
 
     @work(exclusive=True)
     async def check_latency(self):
@@ -67,11 +69,22 @@ class EnvStatus(Horizontal):
             try:
                 response = await client.post(
                     self.current_rpc,
-                    json={"jsonrpc": "2.0", "method": "eth_blockNumber", "params": [], "id": 1}
+                    json={
+                        "jsonrpc": "2.0",
+                        "method": "eth_blockNumber",
+                        "params": [],
+                        "id": 1,
+                    },
                 )
                 if response.status_code == 200:
                     latency = (time.time() - start) * 1000
-                    color = "#00ff00" if latency < 200 else "#ffff00" if latency < 500 else "#ff0000"
+                    color = (
+                        "#00ff00"
+                        if latency < 200
+                        else "#ffff00"
+                        if latency < 500
+                        else "#ff0000"
+                    )
                     self.latency_label.update(f"[{color}]{latency:.0f} ms[/{color}]")
                 else:
                     self.latency_label.update("[red]ERR[/red]")

@@ -3,13 +3,17 @@ import time
 from typing import Any, Dict, List, Optional
 
 import httpx
-from textual import work
+from textual import on
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal
 from textual.screen import ModalScreen
-from textual.widgets import Button, Label, ListView, Static
+from textual.widgets import Button, Label, ListView
 
+from ..config import ConfigManager
+from ..context import ContextDetector
 from ..widgets import RPCListItem
+from .add_rpc_modal import AddRPCModal
+from .password_modal import PasswordModal
 
 
 class RPCScreen(ModalScreen[str]):
@@ -101,12 +105,25 @@ class RPCScreen(ModalScreen[str]):
         color: #f38ba8;
     }
     """
+    BINDINGS = [
+        ("escape", "dismiss(None)", "Back"),
+        ("v", "paste_rpc", "Paste"),
+        ("e", "edit_rpc", "Edit"),
+        ("r", "retry", "Retry"),
+        ("enter", "submit", "Select"),
+    ]
 
     def __init__(self, chain: Dict[str, Any]):
         super().__init__()
         self.chain = chain
-        self.rpc_urls: List[Dict[str, str]] = []
-        raw_rpc = chain.get("rpc", [])
+        self.rpc_data: List[Dict[str, Any]] = self._gather_rpcs()
+
+    def _gather_rpcs(self) -> List[Dict[str, Any]]:
+        rpcs = []
+        cm = ConfigManager()
+
+        # 1. Public RPCs
+        raw_rpc = self.chain.get("rpc", [])
         for r in raw_rpc:
             url = None
             tracking = "unspecified"
@@ -115,9 +132,72 @@ class RPCScreen(ModalScreen[str]):
             elif isinstance(r, dict):
                 url = r.get("url")
                 tracking = r.get("tracking", "unspecified")
-            
+
             if url and not url.startswith("wss://"):
-                self.rpc_urls.append({"url": url, "tracking": tracking})
+                rpcs.append(
+                    {
+                        "url": url,
+                        "display_url": url,
+                        "tracking": tracking,
+                        "source": "public",
+                        "is_secret": False,
+                        "needs_password": False,
+                    }
+                )
+
+        # 2. Custom RPCs from config
+        custom = cm.get_custom_rpcs(self.chain.get("chainId"))
+        for c in custom:
+            url = c.get("url", "")
+            is_encrypted = c.get("encrypted", False)
+            has_secrets = c.get("has_secrets", False)
+            rpc_id = c.get("id")
+
+            display_url = url
+            final_url = url
+            needs_password = is_encrypted
+
+            if has_secrets:
+                if not is_encrypted:
+                    # Try to fetch immediately
+                    secret_data = cm.load_rpc_secret(rpc_id)
+                    if secret_data.get("status") == "ok":
+                        key = secret_data.get("api_key", "")
+                        final_url = url.replace("${API_KEY}", key)
+                else:
+                    # Locked
+                    display_url = url.replace("${API_KEY}", "********")
+
+            rpcs.append(
+                {
+                    "id": rpc_id,
+                    "url": final_url,
+                    "display_url": display_url,
+                    "tracking": "none",
+                    "source": c.get("source", "global"),
+                    "is_secret": has_secrets,
+                    "needs_password": needs_password,
+                }
+            )
+
+        # 3. Context RPCs (Foundry)
+        foundry = ContextDetector.get_foundry_rpc_endpoints()
+        name = self.chain.get("name", "").lower()
+        short = self.chain.get("shortName", "").lower()
+        for f_name, f_url in foundry.items():
+            if f_name.lower() in (name, short):
+                rpcs.append(
+                    {
+                        "url": f_url,
+                        "display_url": f_url,
+                        "tracking": "none",
+                        "source": "project",
+                        "is_secret": False,
+                        "needs_password": False,
+                    }
+                )
+
+        return rpcs
 
     def compose(self) -> ComposeResult:
         name = self.chain.get("name", "Unknown")
@@ -127,7 +207,10 @@ class RPCScreen(ModalScreen[str]):
 
         with Container(id="rpc-container"):
             with Horizontal(id="rpc-header"):
-                yield Label(f"[bold #89b4fa]{name}[/bold #89b4fa] (ID: {cid}, Short: {short}, Currency: {native})", id="header-left")
+                yield Label(
+                    f"[bold #89b4fa]{name}[/bold #89b4fa] (ID: {cid}, Short: {short}, Currency: {native})",
+                    id="header-left",
+                )
                 info_url = self.chain.get("infoURL", "")
                 yield Label(f"{info_url}", id="header-right")
             yield ListView(id="rpc-list")
@@ -142,13 +225,18 @@ class RPCScreen(ModalScreen[str]):
     async def refresh_rpcs(self) -> None:
         rpc_list = self.query_one("#rpc-list", ListView)
         rpc_list.clear()
-        
+
         items = []
-        for r_info in self.rpc_urls:
-            item = RPCListItem(r_info["url"], tracking=r_info["tracking"])
+        for r in self.rpc_data:
+            item = RPCListItem(
+                r["url"],
+                tracking=r["tracking"],
+                source=r["source"],
+                is_secret=r["is_secret"],
+            )
             items.append(item)
             rpc_list.append(item)
-            
+
         # Run latency checks in background
         self.run_worker(self.check_latencies(items))
 
@@ -156,31 +244,64 @@ class RPCScreen(ModalScreen[str]):
         async with httpx.AsyncClient(timeout=2.5) as client:
             tasks = [self.ping_rpc(client, item) for item in items]
             await asyncio.gather(*tasks)
-            
+
         # Sort by latency
         rpc_list = self.query_one("#rpc-list", ListView)
         # Get data from current items before clearing
-        items_data = [(item.url, item.latency, item.tracking) for item in items]
-        sorted_data = sorted(items_data, key=lambda x: (x[1] is None, x[1] or 9999))
-        
+        items_data = []
+        for item in items:
+            items_data.append(
+                {
+                    "display_url": item.url,
+                    "latency": item.latency,
+                    "tracking": item.tracking,
+                    "source": item.source,
+                    "is_secret": item.is_secret,
+                    "actual_url": getattr(item, "actual_url", item.url),
+                    "needs_password": getattr(item, "needs_password", False),
+                    "rpc_id": getattr(item, "rpc_id", None),
+                }
+            )
+
+        sorted_data = sorted(
+            items_data, key=lambda x: (x["latency"] is None, x["latency"] or 9999)
+        )
+
         rpc_list.clear()
-        for url, latency, tracking in sorted_data:
-            new_item = RPCListItem(url, tracking=tracking)
+        for d in sorted_data:
+            new_item = RPCListItem(
+                d["display_url"],
+                tracking=d["tracking"],
+                source=d["source"],
+                is_secret=d["is_secret"],
+            )
+            new_item.actual_url = d["actual_url"]
+            new_item.needs_password = d["needs_password"]
+            new_item.rpc_id = d["rpc_id"]
+
             rpc_list.append(new_item)
-            new_item.update_latency(latency)
-        
-        # Reset selection to top after sort
-        await asyncio.sleep(0.05)
+            new_item.update_latency(d["latency"])
+
         if rpc_list.children:
             rpc_list.index = 0
             rpc_list.focus()
 
     async def ping_rpc(self, client: httpx.AsyncClient, item: RPCListItem) -> None:
+        url = getattr(item, "actual_url", item.url)
+        if not url or "${API_KEY}" in url:
+            item.update_latency(None)
+            return
+
         start = time.time()
         try:
             # Simple JSON-RPC call to check latency
-            payload = {"jsonrpc": "2.0", "method": "eth_blockNumber", "params": [], "id": 1}
-            response = await client.post(item.url, json=payload)
+            payload = {
+                "jsonrpc": "2.0",
+                "method": "eth_blockNumber",
+                "params": [],
+                "id": 1,
+            }
+            response = await client.post(url, json=payload)
             if response.status_code == 200:
                 latency = (time.time() - start) * 1000
                 item.update_latency(latency)
@@ -193,19 +314,78 @@ class RPCScreen(ModalScreen[str]):
         if event.button.id == "btn-back":
             self.dismiss(None)
         elif event.button.id == "btn-retry":
-            self.run_worker(self.refresh_rpcs())
+            self.action_retry()
         elif event.button.id == "btn-select":
             self.action_submit()
 
+    def action_retry(self) -> None:
+        self.run_worker(self.refresh_rpcs())
+
+    def action_paste_rpc(self) -> None:
+        # Check if clipboard has a URL (simplified: just open modal)
+        self.app.push_screen(AddRPCModal(), self._on_rpc_added)
+
+    def _on_rpc_added(self, data: Optional[dict]) -> None:
+        if not data:
+            return
+
+        cm = ConfigManager()
+        # Default to local if it exists, otherwise global
+        is_global = not cm.local_config_exists()
+
+        cm.add_custom_rpc(self.chain.get("chainId"), data, is_global=is_global)
+        self.app.notify("Custom RPC added", title="Success")
+
+        # Refresh the screen data and UI
+        self.rpc_data = self._gather_rpcs()
+        self.run_worker(self.refresh_rpcs())
+
+    def action_edit_rpc(self) -> None:
+        rpc_list = self.query_one("#rpc-list", ListView)
+        if not rpc_list.highlighted_child:
+            return
+
+        # Only allow editing custom RPCs (G/P)
+        item = rpc_list.highlighted_child
+        if item.source == "public":
+            self.app.notify("Cannot edit public RPCs", severity="warning")
+            return
+
+        self.app.notify("Edit mode coming soon", severity="information")
+
+    @on(ListView.Selected)
+    def on_rpc_selected_list(self, event: ListView.Selected) -> None:
+        self.action_submit()
+
     def action_submit(self) -> None:
         rpc_list = self.query_one("#rpc-list", ListView)
+        # print(f"DEBUG: highlighted_child={rpc_list.highlighted_child}, index={rpc_list.index}")
         if rpc_list.highlighted_child:
-            self.dismiss(rpc_list.highlighted_child.url)
+            item = rpc_list.highlighted_child
+            if getattr(item, "needs_password", False):
+                self.app.push_screen(
+                    PasswordModal(), lambda p: self._on_password_provided(item, p)
+                )
+            else:
+                url = getattr(item, "actual_url", item.url)
+                self.dismiss(url)
+
+    def _on_password_provided(self, item: RPCListItem, password: Optional[str]) -> None:
+        if not password:
+            return
+
+        cm = ConfigManager()
+        secret_data = cm.load_rpc_secret(item.rpc_id, password=password)
+
+        if secret_data.get("status") == "ok":
+            key = secret_data.get("api_key", "")
+            final_url = item.url.replace("********", key)
+            self.dismiss(final_url)
+        elif secret_data.get("status") == "wrong_password":
+            self.app.notify("Wrong password", severity="error")
+        else:
+            self.app.notify("Error loading secret", severity="error")
 
     def on_key(self, event: Any) -> None:
-        if event.key in ("escape", "b", "left"):
-            self.dismiss(None)
-        elif event.key == "r":
-            self.run_worker(self.refresh_rpcs())
-        elif event.key in ("enter", "s", "right"):
-            self.action_submit()
+        # Handled by BINDINGS
+        pass

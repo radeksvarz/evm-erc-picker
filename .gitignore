@@ -6,3 +6,6 @@ dist/
 build/
 *.egg-info/
 .cache/
+.rpc-picker.toml
+.coverage
+.env

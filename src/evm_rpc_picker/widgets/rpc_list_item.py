@@ -2,6 +2,7 @@ from typing import Optional
 from textual.containers import Container
 from textual.widgets import Label, ListItem
 
+
 class RPCListItem(ListItem):
     DEFAULT_CSS = """
     RPCListItem {
@@ -24,10 +25,19 @@ class RPCListItem(ListItem):
         color: #fab387;
     }
     """
-    def __init__(self, url: str, tracking: str = "unspecified"):
+
+    def __init__(
+        self,
+        url: str,
+        tracking: str = "unspecified",
+        source: str = "public",
+        is_secret: bool = False,
+    ):
         super().__init__()
         self.url = url
         self.tracking = tracking.lower()
+        self.source = source.lower()
+        self.is_secret = is_secret
         self.latency: Optional[float] = None
         self.latency_label = Label("--- ms", classes="latency-label")
 
@@ -43,7 +53,20 @@ class RPCListItem(ListItem):
             privacy_symbol = "[dim]?UNK[/dim]"
 
         with Container(classes="rpc-row-grid"):
-            yield Label(self.url, classes="url-label")
+            source_tag = ""
+            if self.source == "project":
+                source_tag = "[bold #f5c2e7][P][/bold #f5c2e7] "
+            elif self.source == "global":
+                source_tag = "[bold #89b4fa][G][/bold #89b4fa] "
+
+            lock_icon = " [🔒]" if self.is_secret else ""
+            display_url = self.url
+            if self.is_secret:
+                # Mask secret part if needed, but for now just show the URL
+                # In Phase 4 we will handle full masking
+                pass
+
+            yield Label(f"{source_tag}{display_url}{lock_icon}", classes="url-label")
             yield Label(privacy_symbol, classes="privacy-symbol")
             yield self.latency_label
 
@@ -52,5 +75,11 @@ class RPCListItem(ListItem):
         if latency_ms is None:
             self.latency_label.update("[red]ERR[/red]")
         else:
-            color = "#00ff00" if latency_ms < 200 else "#ffff00" if latency_ms < 500 else "#ff0000"
+            color = (
+                "#00ff00"
+                if latency_ms < 200
+                else "#ffff00"
+                if latency_ms < 500
+                else "#ff0000"
+            )
             self.latency_label.update(f"[{color}]{latency_ms:.0f} ms[/{color}]")
