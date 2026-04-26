@@ -32,7 +32,7 @@ packages = ["src/evm_rpc_picker"]
 
 [tool.hatch.build]
 exclude = [
-  "RULES.md",
+  "AGENTS.md",
   "foundry.toml",
   "uv.lock",
   ".gitignore",
