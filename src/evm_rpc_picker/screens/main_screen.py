@@ -40,9 +40,12 @@ class MainScreen(Screen[str]):
 
     #search-input {
         width: 1fr;
+        height: 3;
         border: solid #313244;
         background: #1e1e2e;
         color: #cdd6f4;
+        padding: 0 1;
+        content-align: left middle;
     }
 
     #filter-status {
@@ -55,10 +58,6 @@ class MainScreen(Screen[str]):
         border: solid #45475a;
         content-align: center middle;
         height: 3;
-    }
-
-    #search-input:focus {
-        border: solid #89b4fa;
     }
 
     #list-container {
@@ -107,10 +106,9 @@ class MainScreen(Screen[str]):
     def compose(self) -> ComposeResult:
         yield CustomHeader()
         with Horizontal(id="search-container"):
-            yield SearchInput(
-                placeholder="Search by name or chain ID (e.g. Ethereum, 1, Polygon...)",
-                id="search-input",
-            )
+            search_input = SearchInput(id="search-input")
+            search_input.placeholder = "Search by name or chain ID (e.g. Ethereum, 1, Polygon...)"
+            yield search_input
             yield Label("Filter: ALL", id="filter-status")
         with Container(id="list-container"):
             table = ChainsTable(id="chain-table")
@@ -251,11 +249,6 @@ class MainScreen(Screen[str]):
                 native,
                 key=str(i),
             )
-
-    @on(Input.Changed, "#search-input")
-    def on_search(self, event: Input.Changed) -> None:
-        self.apply_filter()
-
     def apply_filter(self) -> None:
         query = self.query_one("#search-input", SearchInput).value.lower()
         filtered = self.chains
@@ -311,6 +304,7 @@ class MainScreen(Screen[str]):
         if rpc_url:
             self.app.exit(rpc_url)
 
+
     def on_key(self, event: events.Key) -> None:
         """Handle key events for type-to-search."""
         search_input = self.query_one(SearchInput)
@@ -318,14 +312,17 @@ class MainScreen(Screen[str]):
         if event.key == "backspace":
             if search_input.value:
                 search_input.value = search_input.value[:-1]
+                self.apply_filter()
                 event.stop()
         elif event.is_printable and event.character:
             search_input.value += event.character
+            self.apply_filter()
             event.stop()
         elif event.key == "escape":
             # Clear search on escape if not empty
             if search_input.value:
                 search_input.value = ""
+                self.apply_filter()
                 event.stop()
 
     def _on_init_confirm(self, confirmed: bool | None) -> None:
