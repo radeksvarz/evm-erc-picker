@@ -87,9 +87,9 @@ class MainScreen(Screen[str]):
 
     BINDINGS = [
         Binding("enter", "submit", "Select", tooltip="Select the highlighted chain"),
-        Binding("escape", "app.quit", "Cancel", tooltip="Quit the application"),
-        Binding("ctrl+f", "toggle_filter_favs", "Favorites", tooltip="Toggle showing only your favorite chains"),
-        Binding("ctrl+t", "toggle_filter_type", "Type", tooltip="Toggle between All, Testnets and Mainnets"),
+        Binding("escape", "app.quit", "Cancel", tooltip="Quit the RPC picker"),
+        Binding("ctrl+f", "toggle_filter_favs", "Favorites only", tooltip="Toggle showing only your favorite chains"),
+        Binding("ctrl+t", "toggle_filter_type", "Chain Type", tooltip="Toggle between All, Testnets and Mainnets"),
         Binding("ctrl+r", "refresh_data", "Refresh Data from chainlist.org", show=False),
     ]
 
@@ -191,38 +191,51 @@ class MainScreen(Screen[str]):
         fav_global = self.app.config.get_favorites(project_only=False)
         fav_local = self.app.config.get_favorites(project_only=True)
 
-        # Get chains mentioned in local tool configs (Foundry, etc.)
-        context_names = ContextDetector.get_context_chain_names()
-        context_ids = {
-            c["chainId"]
-            for c in chains
-            if c["name"].lower() in [n.lower() for n in context_names]
-            or c.get("shortName", "").lower() in [n.lower() for n in context_names]
-        }
+        # Get chains from local tools separately
+        foundry_names = set(ContextDetector.get_foundry_rpc_endpoints().keys())
+        hardhat_names = ContextDetector.get_hardhat_networks()
 
-        # Sort: Local > Global Favorite > Others
+        def get_ids_by_names(names: set[str]) -> set[int]:
+            return {
+                c["chainId"]
+                for c in chains
+                if c["name"].lower() in [n.lower() for n in names]
+                or c.get("shortName", "").lower() in [n.lower() for n in names]
+            }
+
+        foundry_ids = get_ids_by_names(foundry_names)
+        hardhat_ids = get_ids_by_names(hardhat_names)
+
+        # Sort: Local Fav > Global Fav > Foundry/Hardhat > Others
         def sort_key(c: dict[str, Any]) -> int:
             cid = c.get("chainId")
-            if cid in fav_local or cid in context_ids:
+            if cid in fav_local:
                 return 0
             if cid in fav_global:
                 return 1
-            return 2
+            if cid in foundry_ids or cid in hardhat_ids:
+                return 2
+            return 3
 
         sorted_chains = sorted(chains, key=sort_key)
         self.filtered_chains = sorted_chains
 
         for i, chain in enumerate(sorted_chains):
             cid = chain.get("chainId")
-            indicator = ""
+            
+            is_g = cid in fav_global
+            is_l = cid in fav_local
+            is_f = cid in foundry_ids
+            is_h = cid in hardhat_ids
 
-            is_local = cid in fav_local or cid in context_ids
-            is_global = cid in fav_global
-
-            if is_local:
-                indicator = "* [L]"
-            elif is_global:
-                indicator = "*"
+            if any([is_g, is_l, is_f, is_h]):
+                g = "[#89b4fa]G[/]" if is_g else " "
+                l = "[#89b4fa]L[/]" if is_l else " "
+                f = "[#89b4fa]F[/]" if is_f else " "
+                h = "[#89b4fa]H[/]" if is_h else " "
+                indicator = f"[{g}{l}{f}{h}]"
+            else:
+                indicator = ""
 
             native = chain.get("nativeCurrency", {}).get("symbol", "N/A")
             table.add_row(
