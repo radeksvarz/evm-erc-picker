@@ -1,3 +1,5 @@
+"""Widget to display the current ETH_RPC_URL environment variable status."""
+
 import os
 import time
 from typing import Any
@@ -10,6 +12,8 @@ from textual.widgets import Label
 
 
 class EnvStatus(Horizontal):
+    """Widget showing the current ETH_RPC_URL and its latency."""
+
     DEFAULT_CSS = """
     EnvStatus {
         background: #181825;

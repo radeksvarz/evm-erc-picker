@@ -131,7 +131,7 @@ class RPCScreen(ModalScreen[str]):
         return rpcs
 
     def _gather_public_rpcs(self) -> list[dict[str, Any]]:
-        rpcs = []
+        rpcs: list[dict[str, Any]] = []
         raw_rpc = self.chain.get("rpc", [])
         for r in raw_rpc:
             url = None
@@ -156,7 +156,7 @@ class RPCScreen(ModalScreen[str]):
         return rpcs
 
     def _gather_custom_rpcs(self) -> list[dict[str, Any]]:
-        rpcs = []
+        rpcs: list[dict[str, Any]] = []
         cm = self.app.config
         cid = self.chain.get("chainId")
         if cid is None:
@@ -200,7 +200,7 @@ class RPCScreen(ModalScreen[str]):
         return rpcs
 
     def _gather_context_rpcs(self) -> list[dict[str, Any]]:
-        rpcs = []
+        rpcs: list[dict[str, Any]] = []
         foundry = ContextDetector.get_foundry_rpc_endpoints()
         name = self.chain.get("name", "").lower()
         short = self.chain.get("shortName", "").lower()

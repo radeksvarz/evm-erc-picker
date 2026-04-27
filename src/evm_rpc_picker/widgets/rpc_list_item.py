@@ -1,9 +1,13 @@
+"""Widget representing a single RPC endpoint in a list."""
+
 from textual.app import ComposeResult
 from textual.containers import Container
 from textual.widgets import Label, ListItem
 
 
 class RPCListItem(ListItem):
+    """List item representing an RPC endpoint with latency and privacy info."""
+
     DEFAULT_CSS = """
     RPCListItem {
         height: 1;
@@ -48,6 +52,7 @@ class RPCListItem(ListItem):
         self.has_secrets: bool = False
 
     def compose(self) -> ComposeResult:
+        """Compose the row with source tag, URL, privacy symbol and latency."""
         # Final ASCII Privacy symbols with specific prefixes
         if self.tracking == "none":
             privacy_symbol = "[green]#SEC[/green]"

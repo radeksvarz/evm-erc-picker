@@ -1,9 +1,12 @@
+"""Main entry point for the EVM RPC Picker CLI."""
+
 import argparse
 
 from evm_rpc_picker.tui import ChainRPCPicker
 
 
 def print_init_snippet() -> None:
+    """Print the shell initialization snippet for the user's .bashrc/.zshrc."""
     snippet = """
 rpc-set() {
     local rpc=$(uvx evm-rpc-picker)
@@ -16,6 +19,7 @@ rpc-set() {
 
 
 def main() -> None:
+    """Parse CLI arguments and run the application."""
     parser = argparse.ArgumentParser(description="EVM RPC Picker - TUI tool to select EVM RPC URLs")
     parser.add_argument(
         "--init",
