@@ -12,9 +12,11 @@ from textual.widgets import DataTable, Footer, Header, Input, Label
 
 from ..context import ContextDetector
 from ..models import fetch_chains, get_cached_chains
-from ..widgets import ChainsTable, EnvStatus, SearchInput
+from ..widgets import ChainsTable, CustomHeader, EnvStatus, SearchInput
 from .confirm_modal import ConfirmModal
 from .rpc_screen import RPCScreen
+
+
 
 
 class MainScreen(Screen[str]):
@@ -100,7 +102,7 @@ class MainScreen(Screen[str]):
         self.filter_favorites_only: bool = False
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=True)
+        yield CustomHeader()
         with Horizontal(id="search-container"):
             yield SearchInput(
                 placeholder="Search by name or chain ID (e.g. Ethereum, 1, Polygon...)",
