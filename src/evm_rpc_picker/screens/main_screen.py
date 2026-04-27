@@ -1,9 +1,10 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, AsyncIterator
 
 if TYPE_CHECKING:
     from ..tui import ChainRPCPicker
 
 from textual import events, on
+from ..commands import RefreshDataProvider
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal
@@ -19,10 +20,15 @@ from .rpc_screen import RPCScreen
 
 
 
+
+
+
 class MainScreen(Screen[str]):
     """Main screen for searching and listing chains."""
 
     app: "ChainRPCPicker"
+
+    COMMANDS = Screen.COMMANDS | {RefreshDataProvider}
 
     DEFAULT_CSS = """
     #search-container {
@@ -88,7 +94,7 @@ class MainScreen(Screen[str]):
         ("ctrl+t", "toggle_filter_type", "Filter Type"),
         ("ctrl+space", "toggle_favorite", "Fav (P)"),
         ("ctrl+shift+space", "toggle_global_favorite", "Fav (G)"),
-        ("ctrl+r", "load_data", "Refresh"),
+        Binding("ctrl+r", "refresh_data", "Refresh Data from chainlist.org", show=False),
         ("c", "init_project", "Init"),
         Binding("tab", "focus_next", "Switch", show=False),
         ("escape", "app.quit", "Exit"),
@@ -180,6 +186,10 @@ class MainScreen(Screen[str]):
     def refresh_table(self) -> None:
         """Trigger search update to refresh table contents and indicators."""
         self.apply_filter()
+
+    async def action_refresh_data(self) -> None:
+        """Force refresh data from chainlist.org."""
+        await self.action_load_data(force=True)
 
     async def action_load_data(self, force: bool = False) -> None:
         """Load chains data from cache or network."""
