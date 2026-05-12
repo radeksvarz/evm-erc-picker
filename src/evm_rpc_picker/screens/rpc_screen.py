@@ -238,10 +238,10 @@ class RPCScreen(Screen[str]):
                 indicator = ""
 
             tracking_map = {
-                "none": "[#a6e3a1]✅ None[/]",
-                "limited": "[#f9e2af]⚠️ Limited[/]",
-                "tracking": "[#f38ba8]❌ Tracking[/]",
-                "unspecified": "[#6c7086]❔ Unknown[/]",
+                "none": "[#a6e3a1]None[/]",
+                "limited": "[#f9e2af]Limited[/]",
+                "tracking": "[#f38ba8]Tracking[/]",
+                "unspecified": "[#6c7086]Unknown[/]",
             }
             tracking_str = tracking_map.get(d.get("tracking", ""), str(d.get("tracking", "")))
 
