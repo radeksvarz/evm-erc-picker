@@ -188,6 +188,7 @@ class ConfigManager:
             "id": rpc_id,
             "url": base_url if api_key else url,
             "note": rpc_data.get("note", ""),
+            "network_type": rpc_data.get("network_type", "Production"),
             "encrypted": is_encrypted,
             "has_secrets": bool(api_key or secret_note),
         }
@@ -245,6 +246,7 @@ class ConfigManager:
             "id": rpc_id,
             "url": base_url if api_key else url,
             "note": rpc_data.get("note", ""),
+            "network_type": rpc_data.get("network_type", "Production"),
             "encrypted": is_encrypted,
             "has_secrets": bool(api_key or secret_note),
         }

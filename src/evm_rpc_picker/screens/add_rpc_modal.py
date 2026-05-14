@@ -2,7 +2,7 @@ from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Checkbox, Input, Label, TextArea
+from textual.widgets import Button, Checkbox, Input, Label, Select, TextArea
 
 
 class AddRPCModal(ModalScreen[dict]):
@@ -20,6 +20,12 @@ class AddRPCModal(ModalScreen[dict]):
         self.initial_data = initial_data or {}
         self.is_edit = bool(initial_data)
         self.needs_chain_id = chain_id is None
+
+    NETWORK_TYPES = [
+        ("Production", "Production"),
+        ("Public Testnet", "Public Testnet"),
+        ("Private Testnet", "Private Testnet"),
+    ]
 
     BINDINGS = [
         ("escape", "cancel", "Cancel"),
@@ -111,6 +117,13 @@ class AddRPCModal(ModalScreen[dict]):
                 id="url-input",
             )
 
+            yield Label("Network Type", classes="field-label")
+            yield Select(
+                self.NETWORK_TYPES,
+                value=self.initial_data.get("network_type", "Production"),
+                id="network-type-select",
+            )
+
             yield Checkbox(
                 "Encrypt RPC URL with password?",
                 value=self.initial_data.get("encrypted", False),
@@ -169,6 +182,7 @@ class AddRPCModal(ModalScreen[dict]):
         data = {
             "chain_id": chain_id,
             "url": url,
+            "network_type": self.query_one("#network-type-select", Select).value,
             "note": self.query_one("#note-input", TextArea).text,
             "secret_note": self.query_one("#secret-note-input", TextArea).text,
             "encrypt": self.query_one("#encrypt-check", Checkbox).value,

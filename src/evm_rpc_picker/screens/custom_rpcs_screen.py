@@ -34,7 +34,7 @@ class CustomRPCScreen(Screen[str]):
         yield Footer()
 
     def on_mount(self) -> None:
-        self.table.add_columns("Src", "URL", "Config Note", "Keyring Note", "Chain ID")
+        self.table.add_columns("Src", "Type", "URL", "Config Note", "Keyring Note", "Chain ID")
         self.refresh_rpcs()
 
     def refresh_rpcs(self) -> None:
@@ -73,6 +73,7 @@ class CustomRPCScreen(Screen[str]):
             ind = f"[{src_str}   ]"
 
             url_display = rpc.get("url", "")
+            network_type = rpc.get("network_type", "Production")
 
             config_note = rpc.get("note", "")
             keyring_note = ""
@@ -87,6 +88,7 @@ class CustomRPCScreen(Screen[str]):
 
             self.table.add_row(
                 ind,
+                network_type,
                 url_display,
                 config_note,
                 keyring_note,
@@ -181,6 +183,7 @@ class CustomRPCScreen(Screen[str]):
     ) -> None:
         initial_data = {
             "url": selected.get("url", ""),
+            "network_type": selected.get("network_type", "Production"),
             "note": selected.get("note", ""),
             "secret_note": secret_data.get("secret_note", ""),
             "encrypted": selected.get("encrypted", False),
