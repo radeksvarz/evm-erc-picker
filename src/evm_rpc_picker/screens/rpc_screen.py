@@ -19,6 +19,21 @@ from .add_rpc_modal import AddRPCModal
 from .password_modal import PasswordModal
 
 
+class RPCTable(DataTable):
+    BINDINGS = [
+        Binding("home", "cursor_top", "Top", show=False),
+        Binding("end", "cursor_bottom", "Bottom", show=False),
+    ]
+
+    def action_cursor_top(self) -> None:
+        if self.row_count > 0:
+            self.move_cursor(row=0)
+
+    def action_cursor_bottom(self) -> None:
+        if self.row_count > 0:
+            self.move_cursor(row=self.row_count - 1)
+
+
 class RPCScreen(Screen[str]):
     """Screen to select RPC and check latency."""
 
@@ -179,7 +194,7 @@ class RPCScreen(Screen[str]):
             )
             yield Label(f"{info_url}", id="header-right")
 
-        table: DataTable = DataTable(id="rpc-table", cursor_type="row")
+        table = RPCTable(id="rpc-table", cursor_type="row")
         yield table
         yield Footer()
 

@@ -14,6 +14,21 @@ if TYPE_CHECKING:
     from ..tui import ChainRPCPicker
 
 
+class CustomRPCTable(DataTable[Any]):
+    BINDINGS = [
+        Binding("home", "cursor_top", "Top", show=False),
+        Binding("end", "cursor_bottom", "Bottom", show=False),
+    ]
+
+    def action_cursor_top(self) -> None:
+        if self.row_count > 0:
+            self.move_cursor(row=0)
+
+    def action_cursor_bottom(self) -> None:
+        if self.row_count > 0:
+            self.move_cursor(row=self.row_count - 1)
+
+
 class CustomRPCScreen(Screen[str]):
     """Screen to manage all custom RPCs."""
 
@@ -29,7 +44,7 @@ class CustomRPCScreen(Screen[str]):
 
     def compose(self) -> ComposeResult:
         yield CustomHeader("Ξ EVM RPC Picker / Custom RPCs")
-        self.table: DataTable[Any] = DataTable(id="custom-rpcs-table", cursor_type="row")
+        self.table = CustomRPCTable(id="custom-rpcs-table", cursor_type="row")
         yield self.table
         yield Footer()
 
