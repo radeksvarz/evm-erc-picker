@@ -37,9 +37,9 @@ class ConfigManager:
 
     def get_favorites(self, project_only: bool = False) -> set[int]:
         """Get a set of favorite chain IDs from both configs or just local."""
-        favorites = set(self.local_config.get("favorites", []))
+        favorites = set(self.local_config.get("favorite_chains", []))
         if not project_only:
-            favorites.update(self.global_config.get("favorites", []))
+            favorites.update(self.global_config.get("favorite_chains", []))
         return favorites
 
     def toggle_favorite(self, chain_id: int, is_global: bool = False) -> None:
@@ -47,13 +47,13 @@ class ConfigManager:
         config = self.global_config if is_global else self.local_config
         path = self.GLOBAL_CONFIG_FILE if is_global else self.LOCAL_CONFIG_FILE
 
-        favorites = list(config.get("favorites", []))
+        favorites = list(config.get("favorite_chains", []))
         if chain_id in favorites:
             favorites.remove(chain_id)
         else:
             favorites.append(chain_id)
 
-        config["favorites"] = favorites
+        config["favorite_chains"] = favorites
         self._save_toml(path, config, is_global=is_global)
 
         # Update internal state
@@ -272,7 +272,7 @@ class ConfigManager:
             doc.add(tomlkit.nl())
 
             for key, value in data.items():
-                if key == "favorites":
+                if key == "favorite_chains":
                     doc.add(tomlkit.comment("List of Chain IDs for pinned networks"))
                     doc.add(key, value)
                     doc.add(tomlkit.nl())
@@ -311,6 +311,6 @@ class ConfigManager:
     def init_local_config(self) -> None:
         """Create an empty local config file."""
         if not self.local_config_exists():
-            default_config: dict[str, Any] = {"favorites": [], "custom_rpcs": {}}
+            default_config: dict[str, Any] = {"favorite_chains": [], "custom_rpcs": {}}
             self._save_toml(self.LOCAL_CONFIG_FILE, default_config)
             self.local_config = default_config

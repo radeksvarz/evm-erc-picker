@@ -233,7 +233,7 @@ def test_init_local_config(temp_config):
 
     cm.init_local_config()
     assert local_file.exists()
-    assert cm.local_config["favorites"] == []
+    assert cm.local_config["favorite_chains"] == []
 
 
 def test_update_custom_rpc_errors(temp_config):

@@ -48,7 +48,7 @@ def mock_cache_file(tmp_path):
     local_file = local_dir / ".rpc-picker.toml"
 
     # Create an empty local config to avoid ConfirmModal
-    local_file.write_text("[favorites]\n")
+    local_file.write_text("[favorite_chains]\n")
 
     with (
         patch("evm_rpc_picker.config.user_config_dir", return_value=str(global_dir)),
