@@ -15,6 +15,7 @@ from ..context import ContextDetector
 from ..models import fetch_chains, get_cached_chains
 from ..widgets import ChainsTable, ContextBar, CustomHeader, EnvStatus, SearchInput
 from .custom_rpcs_screen import CustomRPCScreen
+from .favorite_rpcs_screen import FavoriteRPCScreen
 from .rpc_screen import RPCScreen
 
 
@@ -80,9 +81,16 @@ class MainScreen(Screen[str]):
         text-style: bold;
     }
 
-    #btn-custom-rpcs {
+    #action-buttons-container {
+        height: auto;
         width: 100%;
-        margin: 1 2;
+        align: center middle;
+        margin: 1 0;
+    }
+
+    #action-buttons-container Button {
+        margin: 0 2;
+        min-width: 30;
     }
     """
 
@@ -104,6 +112,7 @@ class MainScreen(Screen[str]):
         Binding("ctrl+r", "refresh_data", "Refresh Data from chainlist.org", show=False),
         Binding("ctrl+e", "use_current_env", "Use Current ETH_RPC_URL", show=False),
         Binding("ctrl+u", "manage_personal_rpcs", "Personal RPC URLs", show=False),
+        Binding("ctrl+b", "view_favorite_rpcs", "Favorite RPCs", show=False),
     ]
 
     def __init__(self) -> None:
@@ -125,11 +134,19 @@ class MainScreen(Screen[str]):
             table.can_focus = True
             yield table
             yield ContextBar(id="context-bar-widget")
-        yield Button(
-            "Personal RPC URLs: Select / Manage [^U]",
-            id="btn-custom-rpcs",
-            variant="primary",
-        )
+            
+        with Horizontal(id="action-buttons-container"):
+            yield Button(
+                "Personal RPC URLs [^U]",
+                id="btn-custom-rpcs",
+                variant="primary",
+            )
+            yield Button(
+                "★ Favorite RPCs [^B]",
+                id="btn-favorite-rpcs",
+                variant="warning",
+            )
+            
         yield EnvStatus(id="env-status-widget")
         yield Footer()
 
@@ -195,6 +212,13 @@ class MainScreen(Screen[str]):
 
     def action_manage_personal_rpcs(self) -> None:
         self.app.push_screen(CustomRPCScreen(), self._on_rpc_selected)
+
+    @on(Button.Pressed, "#btn-favorite-rpcs")
+    def on_favorite_rpcs_pressed(self) -> None:
+        self.action_view_favorite_rpcs()
+
+    def action_view_favorite_rpcs(self) -> None:
+        self.app.push_screen(FavoriteRPCScreen(), self._on_rpc_selected)
 
     async def action_refresh_data(self) -> None:
         """Force refresh data from chainlist.org and retest ENV latency."""

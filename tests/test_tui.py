@@ -221,3 +221,17 @@ async def test_backspace_clears_search():
 
         await pilot.press("backspace")
         assert search_input.value == ""
+
+
+@pytest.mark.asyncio
+async def test_enter_favorite_rpcs_screen():
+    app = ChainRPCPicker()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.5)
+        
+        await pilot.press("ctrl+b")
+        await pilot.pause(0.2)
+        
+        from evm_rpc_picker.screens.favorite_rpcs_screen import FavoriteRPCScreen
+        assert isinstance(app.screen, FavoriteRPCScreen)
+
