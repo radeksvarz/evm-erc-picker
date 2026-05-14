@@ -81,6 +81,19 @@ class RPCScreen(Screen[str]):
     BINDINGS = [
         Binding("escape", "dismiss(None)", "Back"),
         Binding("ctrl+r", "retry", "Retest"),
+        Binding(
+            "ctrl+l",
+            "screen.toggle_favorite",
+            "Fav (Local)",
+            tooltip="Add/remove from local project favorites",
+        ),
+        Binding(
+            "ctrl+g",
+            "screen.toggle_global_favorite",
+            "Fav (Global)",
+            tooltip="Add/remove from global favorites",
+        ),
+
         Binding("enter", "submit", "Select RPC", tooltip="Select the highlighted RPC"),
     ]
 
@@ -95,7 +108,16 @@ class RPCScreen(Screen[str]):
         rpcs.extend(self._gather_public_rpcs())
         rpcs.extend(self._gather_custom_rpcs())
         rpcs.extend(self._gather_context_rpcs())
-        return rpcs
+
+        # Deduplicate by URL to avoid showing the same endpoint twice
+        seen_urls = set()
+        unique_rpcs = []
+        for r in rpcs:
+            url = r.get("url")
+            if url and url not in seen_urls:
+                unique_rpcs.append(r)
+                seen_urls.add(url)
+        return unique_rpcs
 
     def _gather_public_rpcs(self) -> list[dict[str, Any]]:
         rpcs: list[dict[str, Any]] = []
@@ -232,6 +254,16 @@ class RPCScreen(Screen[str]):
             tasks = [self.ping_rpc(client, item) for item in items]
             await asyncio.gather(*tasks)
 
+        self.rpc_data_with_latency = items
+        self.update_table()
+
+    def update_table(self) -> None:
+        """Sort and render the RPC table based on current data."""
+        if not hasattr(self, "rpc_data_with_latency"):
+            return
+
+        items = self.rpc_data_with_latency
+
         # Get favorites for sorting
         fav_global = self.app.config.get_favorite_rpcs(project_only=False)
         fav_local = self.app.config.get_favorite_rpcs(project_only=True)
@@ -262,28 +294,27 @@ class RPCScreen(Screen[str]):
             if d.get("is_secret"):
                 url_display = f"🔒 {url_display}"
 
+            # Flags: G (Global Fav), L (Local Fav), F (Foundry), H (Hardhat)
+            # Match behavior of MainScreen
             is_fav_g = url in fav_global_urls
             is_fav_l = url in fav_local_urls
 
             source = d.get("source", "")
-            is_g = source == "global"
-            is_l = source == "local"
             is_f = source == "foundry"
             is_h = source == "hardhat"
+            # Note: custom RPCs sources are "global" or "project" (which we treat as L)
+            # If an RPC is a global custom RPC, it's basically a global favorite
+            if source == "global": is_fav_g = True
+            if source == "project": is_fav_l = True
 
-            # Combine source indicator with favorite star
-            star = "[#f9e2af]*[/] " if (is_fav_g or is_fav_l) else ""
-            
-            indicator_parts = []
-            if is_g: indicator_parts.append("[#89b4fa]G[/]")
-            if is_l: indicator_parts.append("[#89b4fa]L[/]")
-            if is_f: indicator_parts.append("[#89b4fa]F[/]")
-            if is_h: indicator_parts.append("[#89b4fa]H[/]")
-            
-            if indicator_parts:
-                indicator = f"{star}[{''.join(indicator_parts)}]"
+            if any([is_fav_g, is_fav_l, is_f, is_h]):
+                g_str = "[#89b4fa]G[/]" if is_fav_g else " "
+                l_str = "[#89b4fa]L[/]" if is_fav_l else " "
+                f_str = "[#89b4fa]F[/]" if is_f else " "
+                h_str = "[#89b4fa]H[/]" if is_h else " "
+                indicator = f"[{g_str}{l_str}{f_str}{h_str}]"
             else:
-                indicator = star
+                indicator = ""
 
             tracking_map = {
                 "none": "[#a6e3a1]None[/]",
@@ -393,7 +424,7 @@ class RPCScreen(Screen[str]):
             url = selected.get("url")
             if url:
                 self.app.config.toggle_favorite_rpc(url, is_global=False)
-                self.run_worker(self.refresh_rpcs())
+                self.update_table()
 
     def action_toggle_global_favorite(self) -> None:
         """Toggle favorite for the selected RPC (global)."""
@@ -402,4 +433,4 @@ class RPCScreen(Screen[str]):
             url = selected.get("url")
             if url:
                 self.app.config.toggle_favorite_rpc(url, is_global=True)
-                self.run_worker(self.refresh_rpcs())
+                self.update_table()
