@@ -1,9 +1,23 @@
 import httpx
-from textual import on
+from textual import events, on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Input, Label, Select, TextArea
+
+
+class URLInput(Input):
+    """Input that auto-prepends http:// if missing when losing focus."""
+
+    def on_blur(self, event: events.Blur) -> None:
+        val = self.value.strip()
+        if val and not (
+            val.startswith("http://")
+            or val.startswith("https://")
+            or val.startswith("wss://")
+            or "${API_KEY}" in val
+        ):
+            self.value = f"http://{val}"
 
 
 class AddRPCModal(ModalScreen[dict]):
@@ -122,7 +136,7 @@ class AddRPCModal(ModalScreen[dict]):
                 yield Label(title, classes="modal-title")
 
             yield Label("RPC URL", classes="field-label")
-            yield Input(
+            yield URLInput(
                 value=self.initial_data.get("url", ""),
                 placeholder="https://...",
                 id="url-input",
@@ -227,10 +241,19 @@ class AddRPCModal(ModalScreen[dict]):
             btn.label = "Detect"
 
     def _gather_data(self) -> dict | None:
-        url = self.query_one("#url-input", Input).value
+        url = self.query_one("#url-input", Input).value.strip()
         if not url:
             self.app.notify("URL is required", severity="error")
             return None
+
+        # Auto-prepend http:// if missing
+        if not (
+            url.startswith("http://")
+            or url.startswith("https://")
+            or url.startswith("wss://")
+            or "${API_KEY}" in url
+        ):
+            url = f"http://{url}"
 
         if self.needs_chain_id:
             chain_id_str = self.query_one("#chain-id-input", Input).value
