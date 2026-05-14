@@ -1,3 +1,4 @@
+import httpx
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -74,6 +75,22 @@ class AddRPCModal(ModalScreen[dict]):
         border: solid #313244;
     }
 
+    #chain-id-container {
+        height: auto;
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    #chain-id-container Input {
+        width: 1fr;
+        margin-bottom: 0;
+    }
+
+    #detect-chain-id {
+        margin: 0 0 0 1;
+        min-width: 12;
+    }
+
     Checkbox {
         margin: 1 0;
     }
@@ -102,20 +119,22 @@ class AddRPCModal(ModalScreen[dict]):
             else:
                 yield Label(title, classes="modal-title")
 
-            if self.needs_chain_id:
-                yield Label("Chain ID", classes="field-label")
-                yield Input(
-                    value=str(self.initial_data.get("chain_id", "")),
-                    placeholder="e.g. 1, 11155111",
-                    id="chain-id-input",
-                )
-
             yield Label("RPC URL", classes="field-label")
             yield Input(
                 value=self.initial_data.get("url", ""),
                 placeholder="https://...",
                 id="url-input",
             )
+
+            if self.needs_chain_id:
+                yield Label("Chain ID", classes="field-label")
+                with Horizontal(id="chain-id-container"):
+                    yield Input(
+                        value=str(self.initial_data.get("chain_id", "31337")),
+                        placeholder="e.g. 1, 31337",
+                        id="chain-id-input",
+                    )
+                    yield Button("Detect", id="detect-chain-id", variant="primary")
 
             yield Label("Network Type", classes="field-label")
             yield Select(
@@ -141,9 +160,9 @@ class AddRPCModal(ModalScreen[dict]):
             yield TextArea(self.initial_data.get("secret_note", ""), id="secret-note-input")
 
             with Horizontal(classes="modal-buttons"):
-                yield Button("Cancel [ESC]", id="cancel", variant="error")
+                yield Button("Cancel [Esc]", id="cancel", variant="error")
                 btn_text = "Save Changes" if self.is_edit else "Add RPC"
-                yield Button(f"{btn_text} [Ctrl+S]", id="save", variant="success")
+                yield Button(f"{btn_text} [^S]", id="save", variant="success")
 
     def on_mount(self) -> None:
         if self.initial_data.get("encrypted"):
@@ -163,6 +182,44 @@ class AddRPCModal(ModalScreen[dict]):
     @on(Button.Pressed, "#cancel")
     def on_cancel(self) -> None:
         self.action_cancel()
+
+    @on(Button.Pressed, "#detect-chain-id")
+    async def detect_chain_id(self) -> None:
+        url = self.query_one("#url-input", Input).value
+        if not url:
+            self.app.notify("Please enter an RPC URL first", severity="error")
+            return
+
+        if "${API_KEY}" in url:
+            self.app.notify("Cannot detect chain ID if URL contains ${API_KEY}", severity="warning")
+            return
+
+        btn = self.query_one("#detect-chain-id", Button)
+        btn.disabled = True
+        btn.label = "Detecting..."
+
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                payload = {
+                    "jsonrpc": "2.0",
+                    "method": "eth_chainId",
+                    "params": [],
+                    "id": 1,
+                }
+                resp = await client.post(url, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+                if "result" in data:
+                    chain_id = int(data["result"], 16)
+                    self.query_one("#chain-id-input", Input).value = str(chain_id)
+                    self.app.notify(f"Detected Chain ID: {chain_id}", title="Success")
+                else:
+                    self.app.notify("Invalid response from RPC", severity="error")
+        except Exception as e:
+            self.app.notify(f"Failed to detect Chain ID: {e}", severity="error")
+        finally:
+            btn.disabled = False
+            btn.label = "Detect"
 
     def action_save(self) -> None:
         url = self.query_one("#url-input", Input).value
