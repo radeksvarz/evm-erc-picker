@@ -58,7 +58,7 @@ class RPCScreen(Screen[str]):
         Binding("v", "paste_rpc", "Paste"),
         Binding("e", "edit_rpc", "Edit"),
         Binding("r", "retry", "Retry"),
-        Binding("enter", "submit", "Select", tooltip="Select the highlighted RPC"),
+        Binding("enter", "submit", "Select RPC", tooltip="Select the highlighted RPC"),
     ]
 
     def __init__(self, chain: dict[str, Any]):

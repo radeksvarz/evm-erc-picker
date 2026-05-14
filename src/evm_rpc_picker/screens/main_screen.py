@@ -123,7 +123,7 @@ class MainScreen(Screen[str]):
             table.can_focus = True
             yield table
             yield ContextBar(id="context-bar-widget")
-        yield Button("Manage Custom RPCs", id="btn-custom-rpcs", variant="primary")
+        yield Button("Custom RPCs: Select / Manage", id="btn-custom-rpcs", variant="primary")
         yield EnvStatus(id="env-status-widget")
         yield Footer()
 

@@ -24,7 +24,7 @@ class CustomRPCScreen(Screen[str]):
         Binding("a", "add_rpc", "Add Custom RPC"),
         Binding("e", "edit_rpc", "Edit RPC"),
         Binding("delete", "delete_rpc", "Delete RPC"),
-        Binding("enter", "submit", "Select RPC", show=False),
+        Binding("enter", "submit", "Select RPC", tooltip="Select the highlighted RPC"),
     ]
 
     def compose(self) -> ComposeResult:
