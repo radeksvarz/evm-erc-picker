@@ -103,6 +103,7 @@ class MainScreen(Screen[str]):
         ),  # noqa: E501
         Binding("ctrl+r", "refresh_data", "Refresh Data from chainlist.org", show=False),
         Binding("ctrl+e", "use_current_env", "Use Current ETH_RPC_URL", show=False),
+        Binding("ctrl+u", "manage_personal_rpcs", "Personal RPC URLs", show=False),
     ]
 
     def __init__(self) -> None:
@@ -124,7 +125,11 @@ class MainScreen(Screen[str]):
             table.can_focus = True
             yield table
             yield ContextBar(id="context-bar-widget")
-        yield Button("Custom RPCs: Select / Manage", id="btn-custom-rpcs", variant="primary")
+        yield Button(
+            "Personal RPC URLs: Select / Manage [^U]",
+            id="btn-custom-rpcs",
+            variant="primary",
+        )
         yield EnvStatus(id="env-status-widget")
         yield Footer()
 
@@ -186,6 +191,9 @@ class MainScreen(Screen[str]):
 
     @on(Button.Pressed, "#btn-custom-rpcs")
     def on_custom_rpcs_pressed(self) -> None:
+        self.action_manage_personal_rpcs()
+
+    def action_manage_personal_rpcs(self) -> None:
         self.app.push_screen(CustomRPCScreen(), self._on_rpc_selected)
 
     async def action_refresh_data(self) -> None:

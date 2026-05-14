@@ -58,15 +58,15 @@ if rpc_url:
 ### Main Screen
 | Key | Action |
 |-----|--------|
-| `Tab` | **Switch Focus** (Search ↔ Table ↔ Env Status) |
+| `Tab` | **Switch Focus** (Table ↔ Personal RPCs ↔ Env Status) |
 | `Enter` | **Select** highlighted chain to see RPCs |
-| `/` | **Search** (focuses the search input) |
 | `Ctrl + F` | **Filter Favorites** toggle |
 | `Ctrl + T` | **Filter Network Type** (All ↔ Mainnet ↔ Testnet) |
 | `Ctrl + Space` | **Toggle Local Favorite** (Project level) |
 | `Ctrl + Shift + Space` | **Toggle Global Favorite** (Global level) |
 | `Ctrl + R` | **Refresh** chain data from network |
 | `Ctrl + E` | **Use Current ETH_RPC_URL** (select current ENV and exit) |
+| `Ctrl + U` | **Personal RPC URLs** (manage and select custom endpoints) |
 
 ### RPC Selection Screen
 | Key | Action |
@@ -74,13 +74,25 @@ if rpc_url:
 | `Enter` | **Select** RPC and exit |
 | `Esc` | **Back** to main screen |
 | `a` | **Add** custom RPC for this chain |
+| `v` | **Paste** custom RPC |
 | `e` | **Edit** highlighted custom RPC |
 | `r` | **Refresh** latencies |
+
+### Personal RPC URLs Screen
+| Key | Action |
+|-----|--------|
+| `Enter` | **Select** RPC and exit |
+| `Esc` | **Back** to main screen |
+| `a` | **Add** custom RPC |
+| `e` | **Edit** highlighted RPC |
+| `Delete` | **Delete** highlighted RPC |
 
 ### Add/Edit Custom RPC Modal
 | Key | Action |
 |-----|--------|
-| `Ctrl + S` | **Save** changes |
+| `Ctrl + S` | **Save** changes (when editing) |
+| `Ctrl + G` | **Add Globally** (when adding) |
+| `Ctrl + L` | **Add Locally** (when adding) |
 | `Esc` | **Cancel** |
 
 ## Configuration
