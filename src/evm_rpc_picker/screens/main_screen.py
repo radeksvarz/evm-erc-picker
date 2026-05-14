@@ -189,7 +189,12 @@ class MainScreen(Screen[str]):
         self.app.push_screen(CustomRPCScreen(), self._on_rpc_selected)
 
     async def action_refresh_data(self) -> None:
-        """Force refresh data from chainlist.org."""
+        """Force refresh data from chainlist.org and retest ENV latency."""
+        env_status = self.query_one(EnvStatus)
+        if env_status.current_rpc:
+            env_status.latency_label.update("--- ms")
+            env_status.check_latency()
+
         await self.action_load_data(force=True)
 
     async def action_load_data(self, force: bool = False) -> None:
