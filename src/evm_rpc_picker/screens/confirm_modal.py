@@ -39,16 +39,26 @@ class ConfirmModal(ModalScreen[bool]):
     }
     """
 
-    def __init__(self, message: str):
+    BINDINGS = [
+        ("escape", "no", "Cancel"),
+    ]
+
+    def __init__(self, message: str, yes_label: str = "Yes", no_label: str = "No"):
         super().__init__()
         self.message = message
+        self.yes_label = yes_label
+        self.no_label = no_label
 
     def compose(self) -> ComposeResult:
         with Vertical(id="modal-container"):
             yield Label(self.message, id="modal-message")
             with Horizontal(id="button-container"):
-                yield Button("Yes", variant="primary", id="yes")
-                yield Button("No", variant="error", id="no")
+                yield Button(self.yes_label, variant="primary", id="yes")
+                yield Button(self.no_label, variant="error", id="no")
+
+    def action_no(self) -> None:
+        """Action for No/Cancel."""
+        self.dismiss(False)
 
     @on(Button.Pressed, "#yes")
     def on_yes(self) -> None:
@@ -56,4 +66,4 @@ class ConfirmModal(ModalScreen[bool]):
 
     @on(Button.Pressed, "#no")
     def on_no(self) -> None:
-        self.dismiss(False)
+        self.action_no()

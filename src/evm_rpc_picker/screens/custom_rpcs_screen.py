@@ -308,8 +308,18 @@ class CustomRPCScreen(Screen[str]):
                 self.app.notify("Custom RPC deleted", title="Success")
                 self.refresh_rpcs()
 
+        url = selected.get("url", "")
+        source = selected.get("source", "global")
+        source_str = "[#89b4fa]Global[/] Config" if source == "global" else "[#a6e3a1]Local Project[/] Config"
+
+        msg = (
+            f"Are you sure you want to delete this Custom RPC?\n\n"
+            f"[bold]URL:[/] {url}\n"
+            f"[bold]From:[/] {source_str}"
+        )
+
         self.app.push_screen(
-            ConfirmModal("Are you sure you want to delete this Custom RPC? (Yes = Delete)"),
+            ConfirmModal(msg, yes_label="Delete"),
             check_delete,
         )
 
