@@ -8,7 +8,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal
 from textual.screen import Screen
-from textual.widgets import Button, DataTable, Footer, Label
+from textual.widgets import Button, DataTable, Footer, Label, Tab, Tabs
 
 from ..commands import RefreshDataProvider
 from ..context import ContextDetector
@@ -81,17 +81,6 @@ class MainScreen(Screen[str]):
         text-style: bold;
     }
 
-    #action-buttons-container {
-        height: auto;
-        width: 100%;
-        align: center middle;
-        margin: 1 0;
-    }
-
-    #action-buttons-container Button {
-        margin: 0 2;
-        min-width: 30;
-    }
     """
 
     BINDINGS = [
@@ -111,6 +100,7 @@ class MainScreen(Screen[str]):
         ),  # noqa: E501
         Binding("ctrl+r", "refresh_data", "Refresh Data from chainlist.org", show=False),
         Binding("ctrl+e", "use_current_env", "Use Current ETH_RPC_URL", show=False),
+        Binding("ctrl+n", "view_chainlist", "Chainlist.org", show=False),
         Binding("ctrl+u", "manage_personal_rpcs", "Personal RPC URLs", show=False),
         Binding("ctrl+b", "view_favorite_rpcs", "Favorite RPCs", show=False),
     ]
@@ -123,7 +113,7 @@ class MainScreen(Screen[str]):
         self.filter_favorites_only: bool = False
 
     def compose(self) -> ComposeResult:
-        yield CustomHeader()
+        yield CustomHeader(show_tabs=True)
         with Horizontal(id="search-container"):
             search_input = SearchInput(id="search-input")
             search_input.placeholder = "Search by name or chain ID (e.g. Ethereum, 1, Polygon...)"
@@ -134,18 +124,6 @@ class MainScreen(Screen[str]):
             table.can_focus = True
             yield table
             yield ContextBar(id="context-bar-widget")
-            
-        with Horizontal(id="action-buttons-container"):
-            yield Button(
-                "Personal RPC URLs [^U]",
-                id="btn-custom-rpcs",
-                variant="primary",
-            )
-            yield Button(
-                "★ Favorite RPCs [^B]",
-                id="btn-favorite-rpcs",
-                variant="warning",
-            )
             
         yield EnvStatus(id="env-status-widget")
         yield Footer()
@@ -206,19 +184,24 @@ class MainScreen(Screen[str]):
         self.query_one(ContextBar).update_status()
         self.apply_filter()
 
-    @on(Button.Pressed, "#btn-custom-rpcs")
-    def on_custom_rpcs_pressed(self) -> None:
-        self.action_manage_personal_rpcs()
+    @on(Tabs.TabActivated)
+    def on_tab_activated(self, event: Tabs.TabActivated) -> None:
+        if event.tab.id == "tab-personal":
+            self.action_manage_personal_rpcs()
+        elif event.tab.id == "tab-favorites":
+            self.action_view_favorite_rpcs()
+        # tab-chainlist does nothing, it's the current screen
+
+    def action_view_chainlist(self) -> None:
+        self.query_one("#main-tabs", Tabs).active = "tab-chainlist"
 
     def action_manage_personal_rpcs(self) -> None:
         self.app.push_screen(CustomRPCScreen(), self._on_rpc_selected)
-
-    @on(Button.Pressed, "#btn-favorite-rpcs")
-    def on_favorite_rpcs_pressed(self) -> None:
-        self.action_view_favorite_rpcs()
+        self.call_after_refresh(self.action_view_chainlist)
 
     def action_view_favorite_rpcs(self) -> None:
         self.app.push_screen(FavoriteRPCScreen(), self._on_rpc_selected)
+        self.call_after_refresh(self.action_view_chainlist)
 
     async def action_refresh_data(self) -> None:
         """Force refresh data from chainlist.org and retest ENV latency."""
