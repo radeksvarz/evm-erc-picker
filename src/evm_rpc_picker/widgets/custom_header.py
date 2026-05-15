@@ -1,5 +1,6 @@
 from typing import Any
 
+from textual import events, on
 from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Label, Tab, Tabs
@@ -66,7 +67,7 @@ class CustomHeader(Horizontal):
         self._show_tabs = show_tabs
 
     def compose(self) -> ComposeResult:
-        yield Label(self._header_title, id="header-title")
+        yield Label(self._header_title, id="header-title", classes="palette-trigger")
         if self._show_tabs:
             yield Tabs(
                 Tab("Chainlist.org [^N]", id="tab-chainlist"),
@@ -77,8 +78,10 @@ class CustomHeader(Horizontal):
         else:
             # Empty spacer to keep subtitle on the right
             yield Label("", id="main-tabs")
-        yield Label("CU @ 🍻 BeerFi Prague", id="header-subtitle")
+        yield Label("CU @ 🍻 BeerFi Prague", id="header-subtitle", classes="palette-trigger")
 
-    def on_click(self) -> None:
-        """Open the command palette when the header is clicked."""
+    @on(events.Click, ".palette-trigger")
+    def on_trigger_click(self, event: events.Click) -> None:
+        """Open the command palette when the header text is clicked."""
         self.app.action_command_palette()
+        event.stop()

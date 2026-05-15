@@ -1,367 +1,123 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..tui import ChainRPCPicker
 
-from textual import events, on
+from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal
 from textual.screen import Screen
-from textual.widgets import Button, DataTable, Footer, Label, Tab, Tabs
+from textual.widgets import ContentSwitcher, DataTable, Footer, Tabs
 
 from ..commands import RefreshDataProvider
-from ..context import ContextDetector
-from ..models import fetch_chains, get_cached_chains
-from ..widgets import ChainsTable, ContextBar, CustomHeader, EnvStatus, SearchInput
-from .custom_rpcs_screen import CustomRPCScreen
-from .favorite_rpcs_screen import FavoriteRPCScreen
-from .rpc_screen import RPCScreen
+from ..widgets import CustomHeader, EnvStatus
+from ..tabs.chainlist_tab import ChainlistTab
+from ..tabs.custom_rpcs_tab import CustomRPCTab
+from ..tabs.favorite_rpcs_tab import FavoriteRPCTab
 
 
 class MainScreen(Screen[str]):
-    """Main screen for searching and listing chains."""
+    """Main screen shell hosting navigation tabs and content switcher."""
 
     app: "ChainRPCPicker"
 
     COMMANDS = Screen.COMMANDS | {RefreshDataProvider}
 
     DEFAULT_CSS = """
-    #search-container {
-        height: auto;
-        padding: 1 2;
-        background: #181825;
-        align: left middle;
-    }
-
-    #search-input {
-        width: 1fr;
-        height: 3;
-        border: solid #313244;
-        background: #1e1e2e;
-        color: #cdd6f4;
-        padding: 0 1;
-        content-align: left middle;
-    }
-
-    #filter-status {
-        width: 18;
-        margin-left: 2;
-        background: #313244;
-        color: #f5c2e7;
-        text-style: bold;
-        text-align: center;
-        border: solid #45475a;
-        content-align: center middle;
-        height: 3;
-    }
-
-    #list-container {
-        padding: 0 2;
-    }
-
-    DataTable {
+    #main-content-switcher {
         height: 1fr;
-        border: solid #313244;
-        background: #1e1e2e;
-        color: #cdd6f4;
+        width: 100%;
     }
-
-    DataTable:focus {
-        border: solid #89b4fa;
-    }
-
-    DataTable > .datatable--cursor {
-        background: #89b4fa 30%;
-    }
-
-    DataTable > .datatable--header {
-        background: #313244;
-        color: #f5e0dc;
-        text-style: bold;
-    }
-
     """
 
     BINDINGS = [
-        Binding("enter", "submit", "Select", tooltip="Select the highlighted chain"),
         Binding("escape", "app.quit", "Cancel", tooltip="Quit the RPC picker"),
-        Binding(
-            "ctrl+f",
-            "toggle_filter_favs",
-            "Favorites only",
-            tooltip="Toggle showing only your favorite chains",
-        ),  # noqa: E501
-        Binding(
-            "ctrl+t",
-            "toggle_filter_type",
-            "Chain Type",
-            tooltip="Toggle between All, Testnets and Mainnets",
-        ),  # noqa: E501
-        Binding("ctrl+r", "refresh_data", "Refresh Data from chainlist.org", show=False),
+        Binding("ctrl+n", "switch_tab('tab-chainlist')", "Chainlist.org", show=False),
+        Binding("ctrl+u", "switch_tab('tab-personal')", "Personal RPC URLs", show=False),
+        Binding("ctrl+b", "switch_tab('tab-favorites')", "Favorite RPCs", show=False),
+        # Delegated bindings (processed by active tab if it has the method)
+        Binding("ctrl+f", "delegate_to_tab('action_toggle_filter_favs')", "Favorites only", show=False),
+        Binding("ctrl+t", "delegate_to_tab('action_toggle_filter_type')", "Chain Type", show=False),
+        Binding("ctrl+r", "refresh_all_data", "Refresh Data", show=False),
         Binding("ctrl+e", "use_current_env", "Use Current ETH_RPC_URL", show=False),
-        Binding("ctrl+n", "view_chainlist", "Chainlist.org", show=False),
-        Binding("ctrl+u", "manage_personal_rpcs", "Personal RPC URLs", show=False),
-        Binding("ctrl+b", "view_favorite_rpcs", "Favorite RPCs", show=False),
     ]
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.chains: list[dict[str, Any]] = []
-        self.filtered_chains: list[dict[str, Any]] = []
-        self.filter_type: str = "all"  # all, testnet, mainnet
-        self.filter_favorites_only: bool = False
 
     def compose(self) -> ComposeResult:
         yield CustomHeader(show_tabs=True)
-        with Horizontal(id="search-container"):
-            search_input = SearchInput(id="search-input")
-            search_input.placeholder = "Search by name or chain ID (e.g. Ethereum, 1, Polygon...)"
-            yield search_input
-            yield Label("Filter: ALL", id="filter-status")
-        with Container(id="list-container"):
-            table = ChainsTable(id="chain-table")
-            table.can_focus = True
-            yield table
-            yield ContextBar(id="context-bar-widget")
-            
+        with ContentSwitcher(initial="tab-chainlist", id="main-content-switcher"):
+            yield ChainlistTab(id="tab-chainlist")
+            yield CustomRPCTab(id="tab-personal")
+            yield FavoriteRPCTab(id="tab-favorites")
         yield EnvStatus(id="env-status-widget")
         yield Footer()
 
-    async def on_mount(self) -> None:
-        table = self.query_one(ChainsTable)
-        table.add_columns("", "Chain Name", "ID", "Short", "Currency")
-        table.cursor_type = "row"
-        table.focus()
-        await self.action_load_data()
-
-    def update_filter_status(self) -> None:
-        status_label = self.query_one("#filter-status", Label)
-        star = "* " if self.filter_favorites_only else ""
-        type_str = self.filter_type.upper()
-        status_label.update(f"Filter: {star}{type_str}")
-
-    def action_toggle_filter_favs(self) -> None:
-        self.filter_favorites_only = not self.filter_favorites_only
-        self.apply_filter()
-
-    def action_toggle_filter_type(self) -> None:
-        modes = ["all", "testnet", "mainnet"]
-        current_idx = modes.index(self.filter_type)
-        self.filter_type = modes[(current_idx + 1) % len(modes)]
-        self.apply_filter()
-
-    def action_use_current_env(self) -> None:
-        """Use the current ETH_RPC_URL environment variable and exit."""
-        env_status = self.query_one(EnvStatus)
-        if env_status.current_rpc:
-            self.app.exit(env_status.current_rpc)
-        else:
-            self.app.notify("ETH_RPC_URL is not set", severity="warning")
-
-    def action_toggle_favorite(self) -> None:
-        table = self.query_one(ChainsTable)
-        if table.cursor_row is not None and 0 <= table.cursor_row < len(self.filtered_chains):
-            chain = self.filtered_chains[table.cursor_row]
-            chain_id = chain.get("chainId")
-            if chain_id is None:
-                return
-
-            self.app.config.toggle_favorite(int(chain_id), is_global=False)
-            self.refresh_table()
-
-    def action_toggle_global_favorite(self) -> None:
-        table = self.query_one(ChainsTable)
-        if table.cursor_row is not None and 0 <= table.cursor_row < len(self.filtered_chains):
-            chain = self.filtered_chains[table.cursor_row]
-            chain_id = chain.get("chainId")
-            if chain_id is not None:
-                self.app.config.toggle_favorite(int(chain_id), is_global=True)
-                self.refresh_table()
-
-    def refresh_table(self) -> None:
-        """Trigger search update to refresh table contents and indicators."""
-        self.query_one(ContextBar).update_status()
-        self.apply_filter()
+    async def action_refresh_all_data(self) -> None:
+        """Refresh data in active tab and check ENV latency."""
+        try:
+            env_status = self.query_one(EnvStatus)
+            if env_status.current_rpc:
+                env_status.latency_label.update("--- ms")
+                env_status.check_latency()
+        except Exception:
+            pass
+        
+        self.action_delegate_to_tab("refresh_data")
 
     @on(Tabs.TabActivated)
     def on_tab_activated(self, event: Tabs.TabActivated) -> None:
-        if event.tab.id == "tab-personal":
-            self.action_manage_personal_rpcs()
-        elif event.tab.id == "tab-favorites":
-            self.action_view_favorite_rpcs()
-        # tab-chainlist does nothing, it's the current screen
+        """Switch content when tab is activated and focus its table."""
+        switcher = self.query_one("#main-content-switcher", ContentSwitcher)
+        if event.tab.id:
+            switcher.current = event.tab.id
+            
+            # Use call_after_refresh to ensure the new tab is rendered before focusing
+            def focus_new_tab() -> None:
+                try:
+                    # Find the newly activated tab by ID
+                    tab_content = self.query_one(f"#{event.tab.id}")
+                    # Look for a DataTable inside it
+                    from textual.widgets import DataTable
+                    table = tab_content.query(DataTable).first()
+                    if table:
+                        table.focus()
+                except Exception:
+                    pass
+            
+            self.call_after_refresh(focus_new_tab)
 
-    def action_view_chainlist(self) -> None:
-        self.query_one("#main-tabs", Tabs).active = "tab-chainlist"
+    def action_switch_tab(self, tab_id: str) -> None:
+        """Switch tab programmatically."""
+        tabs = self.query_one(Tabs)
+        tabs.active = tab_id
 
-    def action_manage_personal_rpcs(self) -> None:
-        self.app.push_screen(CustomRPCScreen(), self._on_rpc_selected)
-        self.call_after_refresh(self.action_view_chainlist)
-
-    def action_view_favorite_rpcs(self) -> None:
-        self.app.push_screen(FavoriteRPCScreen(), self._on_rpc_selected)
-        self.call_after_refresh(self.action_view_chainlist)
-
-    async def action_refresh_data(self) -> None:
-        """Force refresh data from chainlist.org and retest ENV latency."""
-        env_status = self.query_one(EnvStatus)
-        if env_status.current_rpc:
-            env_status.latency_label.update("--- ms")
-            env_status.check_latency()
-
-        await self.action_load_data(force=True)
-
-    async def action_load_data(self, force: bool = False) -> None:
-        """Load chains data from cache or network."""
-        table = self.query_one(ChainsTable)
-
-        if not force:
-            cached = get_cached_chains()
-            if cached:
-                self.chains = cached
-                self.apply_filter()
-                return
-
-        self.app.notify("Fetching chain data...", title="Syncing")
-        table.loading = True
-        try:
-            self.chains = await fetch_chains()
-            self.apply_filter()
-        except Exception as e:
-            self.app.notify(f"Error loading data: {e}", severity="error")
-        finally:
-            table.loading = False
-
-    def update_table(self, chains: list[dict[str, Any]]) -> None:
-        table = self.query_one(ChainsTable)
-        table.clear()
-
-        fav_global = set(self.app.config.global_config.get("favorite_chains", []))
-        fav_local = set(self.app.config.local_config.get("favorite_chains", []))
-
-        # Get chains from local tools separately
-        foundry_endpoints = ContextDetector.get_foundry_rpc_endpoints()
-        hardhat_names = ContextDetector.get_hardhat_networks()
-
-        foundry_ids = ContextDetector.match_names_to_ids(foundry_endpoints, self.chains)
-        # For hardhat, we only have names, so we pass empty URL strings
-        hardhat_data = dict.fromkeys(hardhat_names, "")
-        hardhat_ids = ContextDetector.match_names_to_ids(hardhat_data, self.chains)
-
-        # Sort: Local Fav > Global Fav > Foundry/Hardhat > Others
-        def sort_key(c: dict[str, Any]) -> int:
-            cid = c.get("chainId")
-            if cid in fav_local:
-                return 0
-            if cid in fav_global:
-                return 1
-            if cid in foundry_ids or cid in hardhat_ids:
-                return 2
-            return 3
-
-        sorted_chains = sorted(chains, key=sort_key)
-        self.filtered_chains = sorted_chains
-
-        for i, chain in enumerate(sorted_chains):
-            cid = chain.get("chainId")
-
-            is_g = cid in fav_global
-            is_local_f = cid in fav_local
-            is_f = cid in foundry_ids
-            is_h = cid in hardhat_ids
-
-            if any([is_g, is_local_f, is_f, is_h]):
-                g_str = "[#89b4fa]G[/]" if is_g else " "
-                l_str = "[#89b4fa]L[/]" if is_local_f else " "
-                f_str = "[#89b4fa]F[/]" if is_f else " "
-                h_str = "[#89b4fa]H[/]" if is_h else " "
-                indicator = f"[{g_str}{l_str}{f_str}{h_str}]"
+    def action_delegate_to_tab(self, method_name: str) -> None:
+        """Delegate an action to the currently active tab."""
+        switcher = self.query_one("#main-content-switcher", ContentSwitcher)
+        if not switcher.current:
+            return
+        active_tab = self.query_one(f"#{switcher.current}")
+        if active_tab and hasattr(active_tab, method_name):
+            method = getattr(active_tab, method_name)
+            import asyncio
+            if asyncio.iscoroutinefunction(method):
+                self.run_worker(method())
             else:
-                indicator = ""
+                method()
 
-            native = chain.get("nativeCurrency", {}).get("symbol", "N/A")
-            table.add_row(
-                indicator,
-                chain.get("name", "Unknown"),
-                str(cid),
-                chain.get("shortName", "N/A"),
-                native,
-                key=str(i),
-            )
-
-    def apply_filter(self) -> None:
-        query = self.query_one("#search-input", SearchInput).value.lower()
-        filtered = self.chains
-
-        # 1. Apply network type filter
-        if self.filter_type == "mainnet":
-            filtered = [c for c in filtered if not c.get("isTestnet", False)]
-        elif self.filter_type == "testnet":
-            filtered = [c for c in filtered if c.get("isTestnet", False)]
-
-        # 2. Apply favorites filter
-        if self.filter_favorites_only:
-            fav_all = set(self.app.config.get_favorites())
-            # For filtering, we combine both contexts
-            foundry_data = ContextDetector.get_foundry_rpc_endpoints()
-            hardhat_data = dict.fromkeys(ContextDetector.get_hardhat_networks(), "")
-            all_context_data = {**foundry_data, **hardhat_data}
-            context_ids = ContextDetector.match_names_to_ids(all_context_data, self.chains)
-            filtered = [
-                c
-                for c in filtered
-                if c.get("chainId") in fav_all or c.get("chainId") in context_ids
-            ]
-
-        # 3. Apply search query
-        if query:
-            filtered = [
-                c
-                for c in filtered
-                if query in c.get("name", "").lower()
-                or query in str(c.get("chainId", ""))
-                or query in c.get("shortName", "").lower()
-            ]
-
-        self.filtered_chains = filtered
-        self.update_filter_status()
-        self.update_table(filtered)
-
-        # Ensure cursor is visible if we have results
-        table = self.query_one(ChainsTable)
-        if filtered and (table.cursor_row is None or table.cursor_row >= len(filtered)):
-            table.move_cursor(row=0)
-
-    @on(DataTable.RowSelected, "#chain-table")
-    def on_row_selected(self, event: DataTable.RowSelected) -> None:
-        """Handle row selection (Enter) to open RPC screen."""
-        if event.row_key.value is not None:
-            idx = int(event.row_key.value)
-            if 0 <= idx < len(self.filtered_chains):
-                chain = self.filtered_chains[idx]
-                self.app.push_screen(RPCScreen(chain), self._on_rpc_selected)
+    def action_use_current_env(self) -> None:
+        """Exit with current ETH_RPC_URL if available."""
+        # This is usually only relevant in ChainlistTab, but we can check across.
+        from ..widgets.env_status import EnvStatus
+        try:
+            env_status = self.query_one(EnvStatus)
+            if env_status.current_rpc:
+                self.app.exit(env_status.current_rpc)
+            else:
+                self.app.notify("ETH_RPC_URL is not set", severity="warning")
+        except Exception:
+            self.app.notify("Current environment not available in this view", severity="error")
 
     def _on_rpc_selected(self, rpc_url: str | None) -> None:
+        """Common callback for when any tab or sub-screen selects an RPC."""
         if rpc_url:
             self.app.exit(rpc_url)
-
-    def on_key(self, event: events.Key) -> None:
-        """Handle key events for type-to-search."""
-        search_input = self.query_one(SearchInput)
-
-        if event.key == "backspace":
-            if search_input.value:
-                search_input.value = search_input.value[:-1]
-                self.apply_filter()
-                event.stop()
-        elif event.is_printable and event.character:
-            search_input.value += event.character
-            self.apply_filter()
-            event.stop()
-        elif event.key == "escape":
-            # Clear search on escape if not empty
-            if search_input.value:
-                search_input.value = ""
-                self.apply_filter()
-                event.stop()

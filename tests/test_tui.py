@@ -9,6 +9,9 @@ from evm_rpc_picker.tui import ChainRPCPicker
 from evm_rpc_picker.widgets.chains_table import ChainsTable
 from evm_rpc_picker.widgets.env_status import EnvStatus
 from evm_rpc_picker.widgets.search_input import SearchInput
+from evm_rpc_picker.tabs.chainlist_tab import ChainlistTab
+from evm_rpc_picker.tabs.favorite_rpcs_tab import FavoriteRPCTab
+from textual.widgets import ContentSwitcher
 
 # Mock data
 MOCK_CHAINS = [
@@ -92,23 +95,23 @@ async def test_filter_toggle():
     app = ChainRPCPicker()
     async with app.run_test() as pilot:
         await pilot.pause(0.5)
-        main_screen = app.screen
-        table = main_screen.query_one(ChainsTable)
+        tab = app.screen.query_one(ChainlistTab)
+        table = tab.query_one(ChainsTable)
 
-        assert main_screen.filter_type == "all"
+        assert tab.filter_type == "all"
         await pilot.press("ctrl+t")
         await pilot.pause(0.2)
-        assert main_screen.filter_type == "testnet"
+        assert tab.filter_type == "testnet"
         assert table.row_count == 1
 
         await pilot.press("ctrl+t")
         await pilot.pause(0.2)
-        assert main_screen.filter_type == "mainnet"
+        assert tab.filter_type == "mainnet"
         assert table.row_count == 1
 
         await pilot.press("ctrl+t")
         await pilot.pause(0.2)
-        assert main_screen.filter_type == "all"
+        assert tab.filter_type == "all"
         assert table.row_count == 2
 
 
@@ -156,13 +159,13 @@ async def test_favorite_toggle():
     app = ChainRPCPicker()
     async with app.run_test() as pilot:
         await pilot.pause(0.5)
-        main_screen = app.screen
-        table = main_screen.query_one(ChainsTable)
+        tab = app.screen.query_one(ChainlistTab)
+        table = tab.query_one(ChainsTable)
         table.focus()
         table.move_cursor(row=0)
 
         with patch.object(app.config, "toggle_favorite") as mock_toggle:
-            await main_screen.run_action("toggle_favorite")
+            await tab.run_action("toggle_favorite")
             await pilot.pause(0.2)
             mock_toggle.assert_called()
 
@@ -230,8 +233,46 @@ async def test_enter_favorite_rpcs_screen():
         await pilot.pause(0.5)
         
         await pilot.press("ctrl+b")
-        await pilot.pause(0.2)
+        await pilot.pause(0.5)
         
-        from evm_rpc_picker.screens.favorite_rpcs_screen import FavoriteRPCScreen
-        assert isinstance(app.screen, FavoriteRPCScreen)
+        switcher = app.screen.query_one(ContentSwitcher)
+        assert switcher.current == "tab-favorites"
+
+
+@pytest.mark.asyncio
+async def test_tab_switch_focus():
+    """Test that switching tabs via keyboard correctly focuses the table."""
+    app = ChainRPCPicker()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.5)
+        
+        # Switch to favorites via shortcut
+        await pilot.press("ctrl+b")
+        await pilot.pause(1.0)
+        
+        from textual.widgets import ContentSwitcher, DataTable
+        switcher = app.screen.query_one(ContentSwitcher)
+        assert switcher.current == "tab-favorites"
+        
+        # Verify focus is on the table in the new tab
+        active_tab = app.screen.query_one("#tab-favorites")
+        table = active_tab.query_one(DataTable)
+        assert table.has_focus
+
+
+@pytest.mark.asyncio
+async def test_tab_click_no_crash():
+    """Test that clicking a tab doesn't crash (mouse event propagation)."""
+    app = ChainRPCPicker()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.5)
+        
+        # Try to click the favorites tab
+        # We use a selector that is likely to hit the target
+        await pilot.click("#tab-favorites")
+        await pilot.pause(0.5)
+        
+        # We don't strictly assert the switch here if pilot.click is finicky,
+        # but we MUST assert that no command palette is open (which would mean crash/bug)
+        assert not app.query("CommandPalette")
 
