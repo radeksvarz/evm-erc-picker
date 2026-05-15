@@ -3,15 +3,14 @@ import os
 from unittest.mock import patch
 
 import pytest
+from textual.widgets import ContentSwitcher
 
 from evm_rpc_picker.screens.main_screen import MainScreen
+from evm_rpc_picker.tabs.chainlist_tab import ChainlistTab
 from evm_rpc_picker.tui import ChainRPCPicker
 from evm_rpc_picker.widgets.chains_table import ChainsTable
 from evm_rpc_picker.widgets.env_status import EnvStatus
 from evm_rpc_picker.widgets.search_input import SearchInput
-from evm_rpc_picker.tabs.chainlist_tab import ChainlistTab
-from evm_rpc_picker.tabs.favorite_rpcs_tab import FavoriteRPCTab
-from textual.widgets import ContentSwitcher
 
 # Mock data
 MOCK_CHAINS = [
@@ -231,10 +230,10 @@ async def test_enter_favorite_rpcs_screen():
     app = ChainRPCPicker()
     async with app.run_test() as pilot:
         await pilot.pause(0.5)
-        
+
         await pilot.press("ctrl+b")
         await pilot.pause(0.5)
-        
+
         switcher = app.screen.query_one(ContentSwitcher)
         assert switcher.current == "tab-favorites"
 
@@ -245,15 +244,16 @@ async def test_tab_switch_focus():
     app = ChainRPCPicker()
     async with app.run_test() as pilot:
         await pilot.pause(0.5)
-        
+
         # Switch to favorites via shortcut
         await pilot.press("ctrl+b")
         await pilot.pause(1.0)
-        
+
         from textual.widgets import ContentSwitcher, DataTable
+
         switcher = app.screen.query_one(ContentSwitcher)
         assert switcher.current == "tab-favorites"
-        
+
         # Verify focus is on the table in the new tab
         active_tab = app.screen.query_one("#tab-favorites")
         table = active_tab.query_one(DataTable)
@@ -266,13 +266,12 @@ async def test_tab_click_no_crash():
     app = ChainRPCPicker()
     async with app.run_test() as pilot:
         await pilot.pause(0.5)
-        
+
         # Try to click the favorites tab
         # We use a selector that is likely to hit the target
         await pilot.click("#tab-favorites")
         await pilot.pause(0.5)
-        
+
         # We don't strictly assert the switch here if pilot.click is finicky,
         # but we MUST assert that no command palette is open (which would mean crash/bug)
         assert not app.query("CommandPalette")
-

@@ -61,7 +61,9 @@ class CustomHeader(Horizontal):
     }
     """
 
-    def __init__(self, title: str = "Ξ EVM RPC Picker", show_tabs: bool = False, **kwargs: Any) -> None:
+    def __init__(
+        self, title: str = "Ξ EVM RPC Picker", show_tabs: bool = False, **kwargs: Any
+    ) -> None:
         super().__init__(**kwargs)
         self._header_title = title
         self._show_tabs = show_tabs
@@ -73,7 +75,7 @@ class CustomHeader(Horizontal):
                 Tab("Chainlist.org [^N]", id="tab-chainlist"),
                 Tab("Personal RPC URLs [^U]", id="tab-personal"),
                 Tab("★ Favorite RPCs [^B]", id="tab-favorites"),
-                id="main-tabs"
+                id="main-tabs",
             )
         else:
             # Empty spacer to keep subtitle on the right

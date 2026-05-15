@@ -1,4 +1,5 @@
 import time
+
 import httpx
 
 
@@ -21,14 +22,14 @@ async def check_rpc_latency(url: str, timeout: float = 2.0) -> str:
             start_time = time.monotonic()
             resp = await client.post(url, json=payload)
             resp.raise_for_status()
-            
+
             # Ensure it's a valid RPC response
             data = resp.json()
             if "result" not in data and "error" not in data:
                 return "[red]Error[/]"
 
             elapsed = (time.monotonic() - start_time) * 1000
-            
+
             # Color coding
             if elapsed < 100:
                 return f"[green]{elapsed:.0f} ms[/]"

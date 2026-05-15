@@ -1,3 +1,4 @@
+import contextlib
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -7,13 +8,13 @@ from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
-from textual.widgets import ContentSwitcher, DataTable, Footer, Tabs
+from textual.widgets import ContentSwitcher, Footer, Tabs
 
 from ..commands import RefreshDataProvider
-from ..widgets import CustomHeader, EnvStatus
 from ..tabs.chainlist_tab import ChainlistTab
 from ..tabs.custom_rpcs_tab import CustomRPCTab
 from ..tabs.favorite_rpcs_tab import FavoriteRPCTab
+from ..widgets import CustomHeader, EnvStatus
 
 
 class MainScreen(Screen[str]):
@@ -36,7 +37,9 @@ class MainScreen(Screen[str]):
         Binding("ctrl+u", "switch_tab('tab-personal')", "Personal RPC URLs", show=False),
         Binding("ctrl+b", "switch_tab('tab-favorites')", "Favorite RPCs", show=False),
         # Delegated bindings (processed by active tab if it has the method)
-        Binding("ctrl+f", "delegate_to_tab('action_toggle_filter_favs')", "Favorites only", show=False),
+        Binding(
+            "ctrl+f", "delegate_to_tab('action_toggle_filter_favs')", "Favorites only", show=False
+        ),
         Binding("ctrl+t", "delegate_to_tab('action_toggle_filter_type')", "Chain Type", show=False),
         Binding("ctrl+r", "refresh_all_data", "Refresh Data", show=False),
         Binding("ctrl+e", "use_current_env", "Use Current ETH_RPC_URL", show=False),
@@ -53,14 +56,12 @@ class MainScreen(Screen[str]):
 
     async def action_refresh_all_data(self) -> None:
         """Refresh data in active tab and check ENV latency."""
-        try:
+        with contextlib.suppress(Exception):
             env_status = self.query_one(EnvStatus)
             if env_status.current_rpc:
                 env_status.latency_label.update("--- ms")
                 env_status.check_latency()
-        except Exception:
-            pass
-        
+
         self.action_delegate_to_tab("refresh_data")
 
     @on(Tabs.TabActivated)
@@ -69,20 +70,19 @@ class MainScreen(Screen[str]):
         switcher = self.query_one("#main-content-switcher", ContentSwitcher)
         if event.tab.id:
             switcher.current = event.tab.id
-            
+
             # Use call_after_refresh to ensure the new tab is rendered before focusing
             def focus_new_tab() -> None:
-                try:
+                with contextlib.suppress(Exception):
                     # Find the newly activated tab by ID
                     tab_content = self.query_one(f"#{event.tab.id}")
                     # Look for a DataTable inside it
                     from textual.widgets import DataTable
+
                     table = tab_content.query(DataTable).first()
                     if table:
                         table.focus()
-                except Exception:
-                    pass
-            
+
             self.call_after_refresh(focus_new_tab)
 
     def action_switch_tab(self, tab_id: str) -> None:
@@ -99,6 +99,7 @@ class MainScreen(Screen[str]):
         if active_tab and hasattr(active_tab, method_name):
             method = getattr(active_tab, method_name)
             import asyncio
+
             if asyncio.iscoroutinefunction(method):
                 self.run_worker(method())
             else:
@@ -108,6 +109,7 @@ class MainScreen(Screen[str]):
         """Exit with current ETH_RPC_URL if available."""
         # This is usually only relevant in ChainlistTab, but we can check across.
         from ..widgets.env_status import EnvStatus
+
         try:
             env_status = self.query_one(EnvStatus)
             if env_status.current_rpc:

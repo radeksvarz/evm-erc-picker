@@ -93,7 +93,6 @@ class RPCScreen(Screen[str]):
             "Fav (Global)",
             tooltip="Add/remove from global favorites",
         ),
-
         Binding("enter", "submit", "Select RPC", tooltip="Select the highlighted RPC"),
     ]
 
@@ -217,7 +216,7 @@ class RPCScreen(Screen[str]):
         native = self.chain.get("nativeCurrency", {}).get("symbol", "N/A")
         info_url = self.chain.get("infoURL", "")
 
-        yield CustomHeader(f"Ξ EVM RPC Picker / {name}")
+        yield CustomHeader(f"Ξ EVM RPC Picker / Chainlist.org / {name}")
         with Horizontal(id="rpc-header"):
             yield Label(
                 f"ID: {cid} | Short: {short} | Currency: {native}",
@@ -305,7 +304,7 @@ class RPCScreen(Screen[str]):
             url_display = d.get("display_url", "")
             if d.get("name"):
                 url_display = f"[{d['name']}] {url_display}"
-            
+
             if d.get("is_secret"):
                 url_display = f"🔒 {url_display}"
 
@@ -319,8 +318,10 @@ class RPCScreen(Screen[str]):
             is_h = source == "hardhat"
             # Note: custom RPCs sources are "global" or "project" (which we treat as L)
             # If an RPC is a global custom RPC, it's basically a global favorite
-            if source == "global": is_fav_g = True
-            if source == "project": is_fav_l = True
+            if source == "global":
+                is_fav_g = True
+            if source == "project":
+                is_fav_l = True
 
             if any([is_fav_g, is_fav_l, is_f, is_h]):
                 g_str = "[#89b4fa]G[/]" if is_fav_g else " "

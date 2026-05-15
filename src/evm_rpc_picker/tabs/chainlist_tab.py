@@ -7,8 +7,8 @@ from textual.widgets import DataTable, Label, Static
 
 from ..context import ContextDetector
 from ..models import fetch_chains, get_cached_chains
-from ..widgets import ChainsTable, ContextBar, EnvStatus, SearchInput
 from ..screens.rpc_screen import RPCScreen
+from ..widgets import ChainsTable, ContextBar, SearchInput
 
 if TYPE_CHECKING:
     from ..tui import ChainRPCPicker
@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 
 class ChainlistTab(Static):
     """View displaying the searchable list of chains from chainlist.org."""
+
+    app: "ChainRPCPicker"
 
     DEFAULT_CSS = """
     ChainlistTab {
@@ -92,13 +94,12 @@ class ChainlistTab(Static):
             search_input.placeholder = "Search by name or chain ID (e.g. Ethereum, 1, Polygon...)"
             yield search_input
             yield Label("Filter: ALL", id="filter-status")
-            
+
         with Container(id="list-container"):
             table = ChainsTable(id="chain-table")
             table.can_focus = True
             yield table
             yield ContextBar(id="context-bar-widget")
-
 
     async def on_mount(self) -> None:
         table = self.query_one(ChainsTable)
@@ -271,7 +272,7 @@ class ChainlistTab(Static):
             idx = int(event.row_key.value)
             if 0 <= idx < len(self.filtered_chains):
                 chain = self.filtered_chains[idx]
-                self.app.push_screen(RPCScreen(chain), self.app.screen._on_rpc_selected)
+                self.app.push_screen(RPCScreen(chain), self.app.screen._on_rpc_selected) # type: ignore[attr-defined]
 
     def on_key(self, event: events.Key) -> None:
         search_input = self.query_one(SearchInput)

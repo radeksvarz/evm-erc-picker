@@ -50,7 +50,7 @@ class FavoriteRPCTab(Static):
         fav_global = set(self.app.config.global_config.get("favorite_rpcs", []))
         fav_local = set(self.app.config.local_config.get("favorite_rpcs", []))
         all_favs = fav_global.union(fav_local)
-        self.fav_urls = sorted(list(all_favs))
+        self.fav_urls = sorted(all_favs)
 
         chains = get_cached_chains() or []
         url_to_chain: dict[str, str] = {}
@@ -58,13 +58,21 @@ class FavoriteRPCTab(Static):
             c_name = c.get("name", "Unknown")
             for rpc_entry in c.get("rpc", []):
                 url = rpc_entry if isinstance(rpc_entry, str) else rpc_entry.get("url")
-                if url: url_to_chain[url] = c_name
+                if url:
+                    url_to_chain[url] = c_name
 
-        for rpcs in [self.app.config.global_config.get("custom_rpcs", {}), self.app.config.local_config.get("custom_rpcs", {})]:
+        for rpcs in [
+            self.app.config.global_config.get("custom_rpcs", {}),
+            self.app.config.local_config.get("custom_rpcs", {}),
+        ]:
             for cid_str, chain_rpcs in rpcs.items():
-                fallback = next((c.get("name") for c in chains if str(c.get("chainId")) == cid_str), f"Chain {cid_str}")
+                fallback = next(
+                    (c.get("name") for c in chains if str(c.get("chainId")) == cid_str),
+                    f"Chain {cid_str}",
+                )
                 for r in chain_rpcs:
-                    url_to_chain[r.get("url")] = r.get("name") or fallback
+                    r_url = str(r.get("url", ""))
+                    url_to_chain[r_url] = str(r.get("name") or fallback)
 
         self.rpc_details = {}
         for url in self.fav_urls:
@@ -85,38 +93,50 @@ class FavoriteRPCTab(Static):
         def sort_key(url: str) -> tuple[int, str]:
             d = self.rpc_details[url]
             score = 0
-            if d["is_local"]: score -= 2
-            elif d["is_global"]: score -= 1
+            if d["is_local"]:
+                score -= 2
+            elif d["is_global"]:
+                score -= 1
             return (score, url)
 
         sorted_urls = sorted(self.fav_urls, key=sort_key)
         selected_index = 0
         for i, url in enumerate(sorted_urls):
-            if url == selected_url: selected_index = i
+            if url == selected_url:
+                selected_index = i
             data = self.rpc_details[url]
-            indicator = f"[[#89b4fa]{'G' if data['is_global'] else ' '}{'L' if data['is_local'] else ' '}[/]  ]"
+            g_mark = "G" if data["is_global"] else " "
+            l_mark = "L" if data["is_local"] else " "
+            indicator = f"[[#89b4fa]{g_mark}{l_mark}[/]  ]"
             self.table.add_row(indicator, data["chain_name"], url, data["latency"], key=url)
 
         if self.table.row_count > 0:
             self.table.move_cursor(row=selected_index)
 
     def _get_selected_rpc_url(self) -> str | None:
-        if self.table.row_count == 0 or not self.table.is_attached: return None
+        if self.table.row_count == 0 or not self.table.is_attached:
+            return None
         try:
             row_key = self.table.coordinate_to_cell_key(self.table.cursor_coordinate).row_key
             return str(row_key.value)
-        except Exception: return None
+        except Exception:
+            return None
 
     @work(exclusive=True, thread=True)
     def refresh_latency(self) -> None:
-        for url in self.fav_urls: self.rpc_details[url]["latency"] = "Testing..."
+        for url in self.fav_urls:
+            self.rpc_details[url]["latency"] = "Testing..."
         self.app.call_from_thread(self.update_table)
 
-        async def run_checks():
-            results = await asyncio.gather(*(check_rpc_latency(u) for u in self.fav_urls), return_exceptions=True)
+        async def run_checks() -> None:
+            results = await asyncio.gather(
+                *(check_rpc_latency(u) for u in self.fav_urls), return_exceptions=True
+            )
             for i, url in enumerate(self.fav_urls):
                 res = results[i]
-                self.rpc_details[url]["latency"] = "[red]Error[/red]" if isinstance(res, Exception) else res
+                self.rpc_details[url]["latency"] = (
+                    "[red]Error[/red]" if isinstance(res, Exception) else res
+                )
             self.app.call_from_thread(self.update_table)
 
         asyncio.run(run_checks())
@@ -129,20 +149,28 @@ class FavoriteRPCTab(Static):
 
     def action_toggle_global_fav(self) -> None:
         url = self._get_selected_rpc_url()
-        if not url: return
+        if not url:
+            return
         self.app.config.toggle_favorite_rpc(url, is_global=True)
-        self.rpc_details[url]["is_global"] = url in set(self.app.config.global_config.get("favorite_rpcs", []))
+        self.rpc_details[url]["is_global"] = url in set(
+            self.app.config.global_config.get("favorite_rpcs", [])
+        )
         self._sync_favs_and_update()
 
     def action_toggle_local_fav(self) -> None:
         url = self._get_selected_rpc_url()
-        if not url: return
+        if not url:
+            return
         self.app.config.toggle_favorite_rpc(url, is_global=False)
-        self.rpc_details[url]["is_local"] = url in set(self.app.config.local_config.get("favorite_rpcs", []))
+        self.rpc_details[url]["is_local"] = url in set(
+            self.app.config.local_config.get("favorite_rpcs", [])
+        )
         self._sync_favs_and_update()
 
     def _sync_favs_and_update(self) -> None:
-        to_remove = [u for u, d in self.rpc_details.items() if not d["is_global"] and not d["is_local"]]
+        to_remove = [
+            u for u, d in self.rpc_details.items() if not d["is_global"] and not d["is_local"]
+        ]
         for u in to_remove:
             self.fav_urls.remove(u)
             del self.rpc_details[u]

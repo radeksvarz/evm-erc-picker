@@ -1,3 +1,4 @@
+import contextlib
 import subprocess
 from typing import TYPE_CHECKING, Any
 
@@ -38,7 +39,9 @@ class CustomRPCTab(Static):
         yield self.table
 
     def on_mount(self) -> None:
-        self.table.add_columns("Src", "Name", "Type", "Chain ID", "URL", "Config Note", "Keyring Note")
+        self.table.add_columns(
+            "Src", "Name", "Type", "Chain ID", "URL", "Config Note", "Keyring Note"
+        )
         self.refresh_rpcs()
 
     def refresh_rpcs(self) -> None:
@@ -73,13 +76,13 @@ class CustomRPCTab(Static):
             url = rpc.get("url", "")
             is_g = rpc["source"] == "global"
             src_str = "[#89b4fa]G[/]" if is_g else "[#89b4fa]L[/]"
-            
+
             is_fav = False
             if is_g:
                 is_fav = url in cfg.global_config.get("favorite_rpcs", [])
             else:
                 is_fav = url in cfg.local_config.get("favorite_rpcs", [])
-                
+
             fav_str = "[#f9e2af]★[/]" if is_fav else " "
             ind = f"[{src_str} {fav_str} ]"
 
@@ -98,7 +101,14 @@ class CustomRPCTab(Static):
 
             rpc_name = rpc.get("name", "")
             self.table.add_row(
-                ind, rpc_name, network_type, str(cid), url_display, config_note, keyring_note, key=str(i)
+                ind,
+                rpc_name,
+                network_type,
+                str(cid),
+                url_display,
+                config_note,
+                keyring_note,
+                key=str(i),
             )
 
         if self.table.row_count > 0:
@@ -127,14 +137,25 @@ class CustomRPCTab(Static):
 
     def action_paste_add_rpc(self) -> None:
         clipboard = ""
-        # Try Wayland/X11
-        try:
-            clipboard = subprocess.check_output(["wl-paste"], text=True, stderr=subprocess.DEVNULL).strip()
-        except Exception:
-            try:
-                clipboard = subprocess.check_output(["xclip", "-selection", "clipboard", "-o"], text=True, stderr=subprocess.DEVNULL).strip()
-            except Exception:
-                pass
+        import shutil
+        wl_paste = shutil.which("wl-paste")
+        xclip = shutil.which("xclip")
+
+        # Try Wayland
+        if wl_paste:
+            with contextlib.suppress(Exception):
+                clipboard = subprocess.check_output(
+                    [wl_paste], text=True, stderr=subprocess.DEVNULL
+                ).strip()
+
+        # If Wayland fails or empty, try X11
+        if not clipboard and xclip:
+            with contextlib.suppress(Exception):
+                clipboard = subprocess.check_output(
+                    [xclip, "-selection", "clipboard", "-o"],
+                    text=True,
+                    stderr=subprocess.DEVNULL,
+                ).strip()
 
         if not clipboard:
             clipboard = self.app.clipboard.strip()
@@ -151,7 +172,9 @@ class CustomRPCTab(Static):
                 return
             chain_id = data.pop("chain_id")
             is_global = data.pop("is_global", False)
-            self.app.config.add_custom_rpc(chain_id, data, is_global=is_global, password=data.get("password"))
+            self.app.config.add_custom_rpc(
+                chain_id, data, is_global=is_global, password=data.get("password")
+            )
             self.app.notify("Custom RPC added", title="Success")
             self.refresh_rpcs()
 
@@ -167,8 +190,10 @@ class CustomRPCTab(Static):
         chain_id = selected["chain_id"]
 
         if selected.get("has_secrets"):
+
             def check_password(password: str | None) -> None:
-                if password is None: return
+                if password is None:
+                    return
                 secret_data = self.app.config.load_rpc_secret(rpc_id, password)
                 if secret_data.get("status") == "wrong_password":
                     self.app.notify("Invalid password", severity="error")
@@ -177,6 +202,7 @@ class CustomRPCTab(Static):
 
             if selected.get("encrypted"):
                 from ..screens.password_modal import PasswordModal
+
                 self.app.push_screen(PasswordModal(), check_password)
                 return
             else:
@@ -185,7 +211,14 @@ class CustomRPCTab(Static):
         else:
             self._open_edit_modal(selected, {}, is_global, rpc_id, chain_id)
 
-    def _open_edit_modal(self, selected, secret_data, is_global, rpc_id, chain_id) -> None:
+    def _open_edit_modal(
+        self,
+        selected: dict[str, Any],
+        secret_data: dict[str, Any],
+        is_global: bool,
+        rpc_id: str,
+        chain_id: int,
+    ) -> None:
         initial_data = {
             "name": selected.get("name", ""),
             "url": selected.get("url", ""),
@@ -199,28 +232,44 @@ class CustomRPCTab(Static):
             initial_data["url"] = initial_data["url"].replace("${API_KEY}", api_key)
 
         def check_edit(data: dict[str, Any] | None) -> None:
-            if data is None: return
-            if "chain_id" in data: data.pop("chain_id")
+            if data is None:
+                return
+            if "chain_id" in data:
+                data.pop("chain_id")
             self.app.config.update_custom_rpc(chain_id, rpc_id, data, is_global=is_global)
             self.app.notify("Custom RPC updated", title="Success")
             self.refresh_rpcs()
 
         from ..models import get_cached_chains
+
         chains_data = get_cached_chains() or []
-        chain_name = next((c.get("name", "Unknown") for c in chains_data if c.get("chainId") == chain_id), "Unknown")
-        self.app.push_screen(AddRPCModal(chain_name=chain_name, chain_id=chain_id, initial_data=initial_data), check_edit)
+        chain_name = next(
+            (c.get("name", "Unknown") for c in chains_data if c.get("chainId") == chain_id),
+            "Unknown",
+        )
+        self.app.push_screen(
+            AddRPCModal(chain_name=chain_name, chain_id=chain_id, initial_data=initial_data),
+            check_edit,
+        )
 
     def action_delete_rpc(self) -> None:
         selected = self._get_selected_rpc()
-        if not selected: return
+        if not selected:
+            return
 
         def check_delete(confirm: bool | None) -> None:
-            if not confirm: return
-            self.app.config.delete_custom_rpc(selected["chain_id"], selected["id"], is_global=(selected["source"] == "global"))
+            if not confirm:
+                return
+            self.app.config.delete_custom_rpc(
+                selected["chain_id"], selected["id"], is_global=(selected["source"] == "global")
+            )
             self.app.notify("Custom RPC deleted", title="Success")
             self.refresh_rpcs()
 
-        msg = f"Are you sure you want to delete this Custom RPC?\n\n[bold]URL:[/] {selected.get('url')}"
+        msg = (
+            "Are you sure you want to delete this Custom RPC?\n\n"
+            f"[bold]URL:[/] {selected.get('url')}"
+        )
         self.app.push_screen(ConfirmModal(msg, yes_label="Delete"), check_delete)
 
     @on(DataTable.RowSelected)
@@ -229,10 +278,12 @@ class CustomRPCTab(Static):
 
     def action_submit(self) -> None:
         item = self._get_selected_rpc()
-        if not item: return
+        if not item:
+            return
 
         if item.get("encrypted"):
             from ..screens.password_modal import PasswordModal
+
             self.app.push_screen(PasswordModal(), lambda p: self._on_password_provided(item, p))
         else:
             if item.get("has_secrets"):
@@ -246,7 +297,8 @@ class CustomRPCTab(Static):
                 self._on_url_ready(item.get("url", ""))
 
     def _on_password_provided(self, item: dict[str, Any], password: str | None) -> None:
-        if not password: return
+        if not password:
+            return
         secret_data = self.app.config.load_rpc_secret(item["id"], password=password)
         if secret_data.get("status") == "ok":
             url = item.get("url", "").replace("${API_KEY}", secret_data.get("api_key", ""))
@@ -259,4 +311,4 @@ class CustomRPCTab(Static):
     def _on_url_ready(self, url: str) -> None:
         # We need to call the callback that MainScreen expects
         if hasattr(self.app.screen, "_on_rpc_selected"):
-             self.app.screen._on_rpc_selected(url)
+            self.app.screen._on_rpc_selected(url)

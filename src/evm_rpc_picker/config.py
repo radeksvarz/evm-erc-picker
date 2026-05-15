@@ -293,13 +293,39 @@ class ConfigManager:
 
         custom_rpcs[cid_str][index] = entry
         config["custom_rpcs"] = custom_rpcs
-
         if is_global:
             self._save_toml(self.GLOBAL_CONFIG_FILE, config, is_global=True)
             self.global_config = config
         else:
             self._save_toml(self.LOCAL_CONFIG_FILE, config, is_global=False)
             self.local_config = config
+
+    def delete_custom_rpc(self, chain_id: int, rpc_id: str, is_global: bool = False) -> None:
+        """Delete a custom RPC from the specified config."""
+        config = self.global_config if is_global else self.local_config
+        custom_rpcs = config.get("custom_rpcs", {})
+        cid_str = str(chain_id)
+
+        if cid_str not in custom_rpcs:
+            return
+
+        # Filter out the RPC with the matching ID
+        custom_rpcs[cid_str] = [rpc for rpc in custom_rpcs[cid_str] if rpc["id"] != rpc_id]
+
+        # If no RPCs left for this chain, remove the chain entry
+        if not custom_rpcs[cid_str]:
+            del custom_rpcs[cid_str]
+
+        config["custom_rpcs"] = custom_rpcs
+        if is_global:
+            self._save_toml(self.GLOBAL_CONFIG_FILE, config, is_global=True)
+            self.global_config = config
+        else:
+            self._save_toml(self.LOCAL_CONFIG_FILE, config)
+            self.local_config = config
+
+        # Also cleanup secret if exists
+        self.delete_secret(rpc_id)
 
     def _save_toml(self, path: Path, data: dict[str, Any], is_global: bool = False) -> None:
         """Save configuration to a TOML file with comments."""
@@ -313,7 +339,11 @@ class ConfigManager:
 
             for key, value in data.items():
                 if key == "schema_version":
-                    doc.add(tomlkit.comment(f"Config schema version (current: {self.CURRENT_SCHEMA_VERSION})"))
+                    doc.add(
+                        tomlkit.comment(
+                            f"Config schema version (current: {self.CURRENT_SCHEMA_VERSION})"
+                        )
+                    )
                     doc.add(key, value)
                     doc.add(tomlkit.nl())
                 elif key == "favorite_chains":
