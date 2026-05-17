@@ -481,16 +481,39 @@ class ConfigManager:
         except Exception:
             pass
 
+    @staticmethod
+    def _clean_toml_obj(obj: Any) -> Any:
+        """Recursively convert tomlkit elements and tables to standard Python primitives."""
+        if isinstance(obj, dict):
+            return {str(k): ConfigManager._clean_toml_obj(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [ConfigManager._clean_toml_obj(x) for x in obj]
+        if isinstance(obj, (str, int, float, bool)) or obj is None:
+            return obj
+        # Fallback for tomlkit items
+        if hasattr(obj, "items"):
+            return {str(k): ConfigManager._clean_toml_obj(v) for k, v in obj.items()}
+        # Handle custom iterables safely
+        if hasattr(obj, "__iter__") and not isinstance(obj, str):
+            return [ConfigManager._clean_toml_obj(x) for x in obj]
+
+        try:
+            if hasattr(obj, "value"):
+                return obj.value
+            return str(obj)
+        except Exception:
+            return obj
+
     def _build_custom_rpcs_table(
         self, custom_rpcs: dict[str, list[dict[str, Any]]]
     ) -> tomlkit.items.Table:
         """Build a TOML table for custom RPCs."""
+        cleaned_rpcs = self._clean_toml_obj(custom_rpcs)
         rpc_table = tomlkit.table()
-        for chain_id_str, rpcs in custom_rpcs.items():
+        for chain_id_str, rpcs in cleaned_rpcs.items():
             aot = tomlkit.aot()
             for rpc in rpcs:
                 t = tomlkit.table()
-                t.indent(2)
                 for k, v in rpc.items():
                     if isinstance(v, str) and "\n" in v:
                         t.add(k, tomlkit.string(v, multiline=True))
