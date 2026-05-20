@@ -120,3 +120,17 @@ class MainScreen(Screen[str]):
         """Common callback for when any tab or sub-screen selects an RPC."""
         if rpc_url:
             self.app.exit(rpc_url)
+
+    def refresh_active_tab(self) -> None:
+        """Re-render the currently visible tab (e.g. after privacy mode toggle)."""
+        switcher = self.query_one("#main-content-switcher", ContentSwitcher)
+        if not switcher.current:
+            return
+        with contextlib.suppress(Exception):
+            tab_content = self.query_one(f"#{switcher.current}")
+            if hasattr(tab_content, "load_data"):
+                tab_content.load_data()
+            elif hasattr(tab_content, "refresh_rpcs"):
+                tab_content.refresh_rpcs()
+            elif hasattr(tab_content, "update_table"):
+                tab_content.update_table()

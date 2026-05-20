@@ -1,3 +1,5 @@
+import contextlib
+
 from textual.app import App
 from textual.reactive import reactive
 
@@ -44,10 +46,14 @@ class ChainRPCPicker(App[str]):
         self.privacy_mode = not self.privacy_mode
         state = "ON" if self.privacy_mode else "OFF"
         self.notify(
-            f"Privacy Mode is now {state}.",
-            title="Privacy Mode",
+            f"Sensitive Mode is now {state}.",
+            title="Sensitive Mode",
             severity="warning" if self.privacy_mode else "information",
         )
+        with contextlib.suppress(Exception):
+            screen = self.screen
+            if hasattr(screen, "refresh_active_tab"):
+                screen.refresh_active_tab()
 
 
 if __name__ == "__main__":
