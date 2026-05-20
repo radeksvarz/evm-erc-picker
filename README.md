@@ -117,18 +117,20 @@ if rpc_url:
 
 ### Security and Encryption
 
-- All sensitive data (API keys, Secret Notes) are stored in the system keyring (macOS Keychain, Windows Vault, Linux Secret Service).
-- Each custom RPC can optionally have its own password for **additional encryption within the keyring** (AES). Indicated by `rpc_password_protected` flag in config and lock icon `[🔒]` in front of URL.
-- `Config Note` (Public): Saved in TOML config files, not encrypted, portable between machines: `note` config field.
-- `Keyring Note` (Private): Saved in the encrypted system keyring. Indicated by the `note_in_keyring` field in config.
-- If the keyring is unlocked, the app automatically measures latency even for private RPCs.
+- All sensitive API keys are securely stored in the system keyring (macOS Keychain, Windows Vault, Linux Secret Service).
 - API keys must never be stored in plain text within configuration TOML files (use placeholder `{{secret:key-name}}`).
+- **Encrypted & Portable Notes**:
+  - Each custom RPC has a single **Note** field.
+  - If a custom RPC is **not** password-protected, the note is saved as plain text in the TOML configuration (`note` field).
+  - If a custom RPC **is** password-protected, both the URL and the note are securely **encrypted** using AES with the user's password and stored directly in the TOML configuration (`note_encrypted` field). This ensures sensitive notes remain private while making the project configuration fully portable between machines.
+- Each password-protected custom RPC is indicated by the `rpc_password_protected` flag in the configuration and a lock icon `[🔒]` in front of the URL.
+- If the keyring/password is unlocked, the app automatically measures latency for protected RPCs.
 
 ### Detailed Screen (Personal RPCs)
 
-- Lock icon `[🔒]` in front of URL indicates password-protected RPCs (API parts in keyring).
-- If RPC is password-protected, the app prompts for the password when you select or edit it.
-- `[🔒] Locked` label in Keyring Note indicates that there is some note in the keyring, but the keyring is locked.
+- Lock icon `[🔒]` in front of the URL indicates password-protected RPCs.
+- If an RPC is password-protected, the app prompts for the password when you select or edit it.
+- A `[🔒] Locked` label in the **Note** column indicates that the note is securely encrypted and requires the password to be decrypted and viewed.
 
 ## Development
 
