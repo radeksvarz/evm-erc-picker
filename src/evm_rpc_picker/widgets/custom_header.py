@@ -1,3 +1,4 @@
+import contextlib
 from typing import Any
 
 from textual import events, on
@@ -16,7 +17,7 @@ class CustomHeader(Horizontal):
         color: #cdd6f4;
         padding: 0 2;
     }
-    #header-title {
+    #header-title, #header-title-short {
         width: auto;
         height: 2;
         content-align: left top;
@@ -51,13 +52,19 @@ class CustomHeader(Horizontal):
         background: #45475a;
         color: #f5e0dc;
     }
-    #header-subtitle {
+    #header-subtitle, #header-subtitle-short {
         width: auto;
         height: 2;
         content-align: right top;
         text-style: italic;
         color: #6c7086;
         margin-left: 2;
+    }
+    #header-title-short {
+        display: none;
+    }
+    #header-subtitle-short {
+        display: none;
     }
     """
 
@@ -70,6 +77,7 @@ class CustomHeader(Horizontal):
 
     def compose(self) -> ComposeResult:
         yield Label(self._header_title, id="header-title", classes="palette-trigger")
+        yield Label("Ξ", id="header-title-short", classes="palette-trigger")
         if self._show_tabs:
             yield Tabs(
                 Tab("Chainlist.org [^N]", id="tab-chainlist"),
@@ -82,6 +90,34 @@ class CustomHeader(Horizontal):
             # Empty spacer to keep subtitle on the right
             yield Label("", id="main-tabs")
         yield Label("CU @ 🍻 BeerFi Prague", id="header-subtitle", classes="palette-trigger")
+        yield Label("🍻", id="header-subtitle-short", classes="palette-trigger")
+
+    def on_resize(self, event: events.Resize) -> None:
+        with contextlib.suppress(Exception):
+            if event.size.width < 110:
+                self.query_one("#header-title", Label).display = False
+                self.query_one("#header-title-short", Label).display = True
+                self.query_one("#header-subtitle", Label).display = False
+                self.query_one("#header-subtitle-short", Label).display = True
+            else:
+                self.query_one("#header-title", Label).display = True
+                self.query_one("#header-title-short", Label).display = False
+                self.query_one("#header-subtitle", Label).display = True
+                self.query_one("#header-subtitle-short", Label).display = False
+
+        if not self._show_tabs:
+            return
+        with contextlib.suppress(Exception):
+            if event.size.width < 110:
+                self.query_one("#tab-chainlist", Tab).update("Chainlist [^N]")
+                self.query_one("#tab-personal", Tab).update("Personal [^U]")
+                self.query_one("#tab-favorites", Tab).update("Favs [^B]")
+                self.query_one("#tab-env", Tab).update("Envs [^E]")
+            else:
+                self.query_one("#tab-chainlist", Tab).update("Chainlist.org [^N]")
+                self.query_one("#tab-personal", Tab).update("Personal RPC URLs [^U]")
+                self.query_one("#tab-favorites", Tab).update("★ Favorite RPCs [^B]")
+                self.query_one("#tab-env", Tab).update("Env RPCs [^E]")
 
     @on(events.Click, ".palette-trigger")
     def on_trigger_click(self, event: events.Click) -> None:
