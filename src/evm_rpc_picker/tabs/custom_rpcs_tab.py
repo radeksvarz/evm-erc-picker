@@ -9,6 +9,7 @@ from textual.widgets import DataTable, Static
 
 from ..screens.add_rpc_modal import AddRPCModal
 from ..screens.confirm_modal import ConfirmModal
+from ..utils.privacy import mask_url
 
 if TYPE_CHECKING:
     from ..tui import ChainRPCPicker
@@ -106,6 +107,7 @@ class CustomRPCTab(Static):
             url_display = url
             network_type = rpc.get("network_type", "Production")
             note_display = ""
+            privacy: bool = getattr(self.app, "privacy_mode", False)
 
             if rpc.get("rpc_password_protected"):
                 url_display = f"[🔒] {url_display}"
@@ -116,6 +118,12 @@ class CustomRPCTab(Static):
                     note_display = secret_data.get("secret_note", "")
             else:
                 note_display = rpc.get("note", "")
+
+            if privacy:
+                url_display = mask_url(url)
+                if rpc.get("rpc_password_protected"):
+                    url_display = f"[🔒] {url_display}"
+                note_display = "••••••••" if note_display else ""
 
             rpc_name = rpc.get("name", "")
             self.table.add_row(

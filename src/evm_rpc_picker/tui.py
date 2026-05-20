@@ -1,4 +1,5 @@
 from textual.app import App
+from textual.reactive import reactive
 
 from .config import ConfigManager
 from .screens import MainScreen
@@ -9,9 +10,12 @@ class ChainRPCPicker(App[str]):
 
     TITLE = "EVM RPC Picker"
 
-    def __init__(self) -> None:
+    privacy_mode: reactive[bool] = reactive(False)
+
+    def __init__(self, privacy: bool = False) -> None:
         super().__init__()
         self.config = ConfigManager()
+        self._initial_privacy = privacy
 
     CSS = """
     Screen {
@@ -31,7 +35,19 @@ class ChainRPCPicker(App[str]):
     """
 
     def on_mount(self) -> None:
+        """Mount main screen and apply initial privacy mode."""
+        self.privacy_mode = self._initial_privacy
         self.push_screen(MainScreen())
+
+    def action_toggle_privacy(self) -> None:
+        """Toggle privacy (sensitive) mode on/off."""
+        self.privacy_mode = not self.privacy_mode
+        state = "ON" if self.privacy_mode else "OFF"
+        self.notify(
+            f"Privacy Mode is now {state}.",
+            title="Privacy Mode",
+            severity="warning" if self.privacy_mode else "information",
+        )
 
 
 if __name__ == "__main__":

@@ -45,6 +45,13 @@ class MainScreen(Screen[str]):
             tooltip="from Chainlist.org",
             show=False,
         ),
+        Binding(
+            "ctrl+s",
+            "app.toggle_privacy",
+            "Sensitive Mode",
+            tooltip="Toggle Privacy / Streamer Mode (hide sensitive URLs and notes)",
+            show=True,
+        ),
     ]
 
     def compose(self) -> ComposeResult:

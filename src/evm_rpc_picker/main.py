@@ -29,6 +29,12 @@ def main() -> None:
     parser.add_argument(
         "--clear-cache", action="store_true", help="Clear the local chain data cache"
     )
+    parser.add_argument(
+        "--privacy",
+        "-p",
+        action="store_true",
+        help="Start in Privacy Mode (mask sensitive URLs and notes)",
+    )
 
     args = parser.parse_args()
 
@@ -42,7 +48,7 @@ def main() -> None:
         clear_cache()
         # We don't print anything to stdout to avoid messing up the TUI/shell capture
 
-    app: ChainRPCPicker = ChainRPCPicker()
+    app: ChainRPCPicker = ChainRPCPicker(privacy=args.privacy)
     # Run the app. The app.exit(result) call will return 'result' here.
     result = app.run()
 

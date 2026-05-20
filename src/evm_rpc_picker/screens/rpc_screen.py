@@ -14,6 +14,7 @@ from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Label
 
 from ..context import ContextDetector
+from ..utils.privacy import mask_url
 from ..widgets.custom_header import CustomHeader
 from .password_modal import PasswordModal
 
@@ -320,7 +321,9 @@ class RPCScreen(Screen[str]):
             table.focus()
 
     def _format_url_display(self, d: dict[str, Any]) -> str:
-        url_display = str(d.get("display_url", ""))
+        privacy: bool = getattr(self.picker_app, "privacy_mode", False)
+        raw_url = str(d.get("display_url", ""))
+        url_display = mask_url(raw_url) if privacy else raw_url
         if d.get("name"):
             url_display = f"[{d['name']}] {url_display}"
         if d.get("rpc_password_protected"):

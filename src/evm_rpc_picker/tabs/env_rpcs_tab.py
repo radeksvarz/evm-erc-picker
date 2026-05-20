@@ -8,6 +8,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.widgets import DataTable, Static
 
+from ..utils.privacy import mask_url
 from ..utils.rpc_tester import check_rpc_latency
 
 if TYPE_CHECKING:
@@ -95,12 +96,14 @@ class EnvRPCTab(Static):
         if not self.is_attached:
             return
         self.table.clear()
+        privacy: bool = getattr(self.app, "privacy_mode", False)
         for item in self.env_rpcs:
             url = item["url"]
             masked_url = "(not set)"
             if url:
-                # Mask secret API keys safely
-                if "/v3/" in url:
+                if privacy:
+                    masked_url = mask_url(url)
+                elif "/v3/" in url:
                     parts = url.split("/v3/")
                     masked_url = parts[0] + "/v3/********"
                 elif "/v2/" in url:

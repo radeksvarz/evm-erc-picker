@@ -1,10 +1,13 @@
 import contextlib
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from textual import events, on
 from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Label, Tab, Tabs
+
+if TYPE_CHECKING:
+    pass
 
 
 class CustomHeader(Horizontal):
@@ -60,10 +63,24 @@ class CustomHeader(Horizontal):
         color: #6c7086;
         margin-left: 2;
     }
+    #header-subtitle-privacy, #header-subtitle-privacy-short {
+        width: auto;
+        height: 2;
+        content-align: right top;
+        text-style: bold;
+        color: #f38ba8;
+        margin-left: 2;
+    }
     #header-title-short {
         display: none;
     }
     #header-subtitle-short {
+        display: none;
+    }
+    #header-subtitle-privacy {
+        display: none;
+    }
+    #header-subtitle-privacy-short {
         display: none;
     }
     """
@@ -91,19 +108,26 @@ class CustomHeader(Horizontal):
             yield Label("", id="main-tabs")
         yield Label("CU @ 🍻 BeerFi Prague", id="header-subtitle", classes="palette-trigger")
         yield Label("🍻", id="header-subtitle-short", classes="palette-trigger")
+        yield Label("[🙈] Sensitive Mode", id="header-subtitle-privacy")
+        yield Label("[🙈]", id="header-subtitle-privacy-short")
+
+    def on_mount(self) -> None:
+        """Sync initial privacy mode state from app after mount."""
+        with contextlib.suppress(Exception):
+            privacy: bool = getattr(self.app, "privacy_mode", False)
+            self._apply_privacy(privacy)
 
     def on_resize(self, event: events.Resize) -> None:
         with contextlib.suppress(Exception):
+            privacy: bool = getattr(self.app, "privacy_mode", False)
             if event.size.width < 110:
                 self.query_one("#header-title", Label).display = False
                 self.query_one("#header-title-short", Label).display = True
-                self.query_one("#header-subtitle", Label).display = False
-                self.query_one("#header-subtitle-short", Label).display = True
+                self._apply_privacy(privacy, narrow=True)
             else:
                 self.query_one("#header-title", Label).display = True
                 self.query_one("#header-title-short", Label).display = False
-                self.query_one("#header-subtitle", Label).display = True
-                self.query_one("#header-subtitle-short", Label).display = False
+                self._apply_privacy(privacy, narrow=False)
 
         if not self._show_tabs:
             return
@@ -118,6 +142,25 @@ class CustomHeader(Horizontal):
                 self.query_one("#tab-personal", Tab).update("Personal RPC URLs [^U]")
                 self.query_one("#tab-favorites", Tab).update("★ Favorite RPCs [^B]")
                 self.query_one("#tab-env", Tab).update("Env RPCs [^E]")
+
+    def _apply_privacy(self, privacy: bool, narrow: bool | None = None) -> None:
+        """Show/hide subtitle vs. privacy indicator labels according to mode."""
+        with contextlib.suppress(Exception):
+            # Determine narrow state if not provided explicitly
+            if narrow is None:
+                try:
+                    narrow = self.size.width < 110
+                except Exception:
+                    narrow = False
+
+            self.query_one("#header-subtitle", Label).display = not privacy and not narrow
+            self.query_one("#header-subtitle-short", Label).display = not privacy and narrow
+            self.query_one("#header-subtitle-privacy", Label).display = privacy and not narrow
+            self.query_one("#header-subtitle-privacy-short", Label).display = privacy and narrow
+
+    def watch_privacy_mode(self, privacy: bool) -> None:
+        """Called automatically when app.privacy_mode changes."""
+        self._apply_privacy(privacy)
 
     @on(events.Click, ".palette-trigger")
     def on_trigger_click(self, event: events.Click) -> None:

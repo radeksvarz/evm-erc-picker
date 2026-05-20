@@ -7,6 +7,7 @@ from textual.binding import Binding
 from textual.widgets import DataTable, Static
 
 from ..models import get_cached_chains
+from ..utils.privacy import mask_url
 from ..utils.rpc_tester import check_rpc_latency
 
 if TYPE_CHECKING:
@@ -115,6 +116,7 @@ class FavoriteRPCTab(Static):
 
         sorted_urls = sorted(self.fav_urls, key=sort_key)
         selected_index = 0
+        privacy: bool = getattr(self.app, "privacy_mode", False)
         for i, url in enumerate(sorted_urls):
             if url == selected_url:
                 selected_index = i
@@ -122,7 +124,8 @@ class FavoriteRPCTab(Static):
             g_mark = "G" if data["is_global"] else " "
             l_mark = "L" if data["is_local"] else " "
             indicator = f"[[#89b4fa]{g_mark}{l_mark}[/]  ]"
-            self.table.add_row(indicator, data["chain_name"], url, data["latency"], key=url)
+            display_url = mask_url(url) if privacy else url
+            self.table.add_row(indicator, data["chain_name"], display_url, data["latency"], key=url)
 
         if self.table.row_count > 0:
             self.table.move_cursor(row=selected_index)

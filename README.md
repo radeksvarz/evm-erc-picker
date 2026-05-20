@@ -16,7 +16,8 @@ A powerful TUI (Terminal User Interface) tool to search for EVM chains and manag
 -   **Filtering**: 
     *   Toggle between **Mainnet**, **Testnet**, or **All**.
     *   Quickly filter to show only your **Favorite** chains.
--   **Notes**: Attach public notes (saved in config) or secret notes (saved in keyring) to your RPCs.
+-   **Notes**: Attach notes to your custom RPCs — stored as plain text (public) or AES-encrypted and portable inside the config file (private, when password-protected).
+-   **Sensitive Mode**: Toggle `Ctrl + S` to instantly mask all sensitive URLs and notes for screen sharing or streaming. Also available via `--privacy` / `-p` CLI flag.
 
 ## Installation
 
@@ -69,6 +70,7 @@ if rpc_url:
 | `Ctrl + E` | **Use Current ETH_RPC_URL** (select current ENV and exit) |
 | `Ctrl + U` | **Personal RPC URLs** (manage and select custom endpoints) |
 | `Ctrl + B` | **Favorite RPCs** (view all bookmarked public and custom endpoints) |
+| `Ctrl + S` | **Toggle Sensitive Mode** (mask all URLs and notes for screen sharing) |
 
 ### Chainlist.org chain's RPC Selection Screen
 | Key | Action |
@@ -106,6 +108,29 @@ if rpc_url:
 | `Ctrl + G` | **Add Globally** (when adding) |
 | `Ctrl + L` | **Add Locally** (when adding) |
 | `Esc` | **Cancel** |
+
+## Sensitive Mode (Streamer / Over-Shoulder Protection)
+
+Sensitive Mode lets you instantly hide all sensitive RPC URLs and notes without closing the application — useful when sharing your screen, streaming, or recording.
+
+### Activation
+
+| Method | Command |
+|--------|---------|
+| **Runtime toggle** | `Ctrl + S` on the main screen |
+| **CLI flag** | `evm-rpc-picker --privacy` or `evm-rpc-picker -p` |
+
+### What gets masked
+
+| Element | Normal display | Sensitive Mode |
+|---------|---------------|----------------|
+| URL with API key | `https://mainnet.infura.io/v3/mykey` | `https://mainnet.infura.io/••••••••` |
+| URL with credentials | `https://user:pass@rpc.example.com/key` | `https://••••••••@rpc.example.com/••••••••` |
+| RPC note | `my personal note` | `••••••••` |
+
+The **host/domain** remains visible so you can still identify the provider. When Sensitive Mode is active, the header subtitle changes to **`[🙈] Sensitive Mode`** (displayed in red).
+
+> **Note**: Sensitive Mode is display-only. Selecting an RPC still returns the real URL to the shell.
 
 ## Configuration
 
