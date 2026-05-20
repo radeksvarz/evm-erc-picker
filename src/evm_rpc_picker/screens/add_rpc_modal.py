@@ -162,7 +162,7 @@ class AddRPCModal(ModalScreen[dict]):
             )
 
             yield Checkbox(
-                "Encrypt RPC URL with password?",
+                "Encrypt URL & Note with password?",
                 value=self.initial_data.get("encrypted", False),
                 id="encrypt-check",
             )
@@ -178,11 +178,8 @@ class AddRPCModal(ModalScreen[dict]):
                 id="name-input",
             )
 
-            yield Label("Note @ config", classes="field-label")
+            yield Label("Note", classes="field-label")
             yield TextArea(self.initial_data.get("note", ""), id="note-input")
-
-            yield Label("Secret Note @ keyring", classes="field-label")
-            yield TextArea(self.initial_data.get("secret_note", ""), id="secret-note-input")
 
             with Horizontal(classes="modal-buttons"):
                 yield Button("Cancel [Esc]", id="cancel", variant="error")
@@ -279,7 +276,6 @@ class AddRPCModal(ModalScreen[dict]):
             "url": url,
             "network_type": self.query_one("#network-type-select", Select).value,
             "note": self.query_one("#note-input", TextArea).text,
-            "secret_note": self.query_one("#secret-note-input", TextArea).text,
             "encrypt": self.query_one("#encrypt-check", Checkbox).value,
             "password": self.query_one("#password-input", Input).value,
         }

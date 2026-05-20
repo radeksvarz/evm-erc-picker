@@ -196,7 +196,7 @@ def test_rpc_secrets(temp_config):
         patch("keyring.get_password") as mock_get,
     ):
         # 1. Standard (not encrypted)
-        cm.save_rpc_secret("rpc1", "key1", "note1")
+        cm.save_rpc_secret("rpc1", "key1")
         args, _ = mock_set.call_args
         saved_data = json.loads(args[2])
         assert saved_data["api_key"] == "key1"
@@ -208,7 +208,7 @@ def test_rpc_secrets(temp_config):
         assert loaded["status"] == "ok"
 
         # 2. Encrypted
-        cm.save_rpc_secret("rpc2", "key2", "note2", password="p")
+        cm.save_rpc_secret("rpc2", "key2", password="p")
         args, _ = mock_set.call_args
         saved_data = json.loads(args[2])
         assert saved_data["encrypted"]

@@ -47,9 +47,8 @@ class CustomRPCTab(Static):
         yield self.table
 
     def on_mount(self) -> None:
-        self.table.add_columns(
-            "Src", "Name", "Type", "Chain ID", "URL", "Config Note", "Keyring Note"
-        )
+        self.table = self.query_one("#custom-rpcs-table", DataTable)
+        self.table.add_columns("Src", "Name", "Type", "Chain ID", "URL", "Note")
         self.refresh_rpcs()
 
     def refresh_rpcs(self, highlight_rpc_id: str | None = None) -> None:
@@ -106,18 +105,17 @@ class CustomRPCTab(Static):
 
             url_display = url
             network_type = rpc.get("network_type", "Production")
-            config_note = rpc.get("note", "")
-            keyring_note = ""
+            note_display = ""
 
             if rpc.get("rpc_password_protected"):
                 url_display = f"[🔒] {url_display}"
-
-            if rpc.get("has_secrets"):
                 secret_data = cfg.load_rpc_secret(rpc_id)
                 if secret_data.get("status") == "needs_password":
-                    keyring_note = "[#f38ba8][🔒] Locked[/]"
+                    note_display = "[#f38ba8][🔒] Locked[/]"
                 else:
-                    keyring_note = secret_data.get("secret_note", "")
+                    note_display = secret_data.get("secret_note", "")
+            else:
+                note_display = rpc.get("note", "")
 
             rpc_name = rpc.get("name", "")
             self.table.add_row(
@@ -126,8 +124,7 @@ class CustomRPCTab(Static):
                 network_type,
                 str(cid),
                 url_display,
-                config_note,
-                keyring_note,
+                note_display,
                 key=str(i),
             )
 
@@ -245,8 +242,11 @@ class CustomRPCTab(Static):
             "name": selected.get("name", ""),
             "url": selected.get("url", ""),
             "network_type": selected.get("network_type", "Production"),
-            "note": selected.get("note", ""),
-            "secret_note": secret_data.get("secret_note", ""),
+            "note": (
+                secret_data.get("secret_note", "")
+                if selected.get("encrypted")
+                else selected.get("note", "")
+            ),
             "encrypted": selected.get("encrypted", False),
         }
         api_key = secret_data.get("api_key")
