@@ -32,7 +32,7 @@ class EnvRPCTable(DataTable[Any]):
 class EnvRPCTab(Static):
     """Tab to list and test RPCs from environment variables."""
 
-    app: "ChainRPCPicker"
+    app: "ChainRPCPicker"  # pyrefly: ignore[bad-override]
 
     BINDINGS = [
         Binding("ctrl+r", "refresh_data", "Refresh", show=True),

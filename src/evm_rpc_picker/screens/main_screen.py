@@ -21,7 +21,7 @@ from ..widgets import CustomHeader
 class MainScreen(Screen[str]):
     """Main screen shell hosting navigation tabs and content switcher."""
 
-    app: "ChainRPCPicker"
+    app: "ChainRPCPicker"  # pyrefly: ignore[bad-override]
 
     COMMANDS = Screen.COMMANDS | {RefreshDataProvider}
 

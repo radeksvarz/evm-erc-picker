@@ -32,7 +32,7 @@ class CustomRPCTable(DataTable[Any]):
 class CustomRPCTab(Static):
     """Tab to manage all custom RPCs."""
 
-    app: "ChainRPCPicker"
+    app: "ChainRPCPicker"  # pyrefly: ignore[bad-override]
 
     BINDINGS = [
         Binding("a", "add_rpc", "Add RPC", show=True),
@@ -47,7 +47,7 @@ class CustomRPCTab(Static):
         yield self.table
 
     def on_mount(self) -> None:
-        self.table = self.query_one("#custom-rpcs-table", DataTable)
+        self.table = self.query_one("#custom-rpcs-table", CustomRPCTable)
         self.table.add_columns("Src", "Name", "Type", "Chain ID", "URL", "Note")
         self.refresh_rpcs()
 

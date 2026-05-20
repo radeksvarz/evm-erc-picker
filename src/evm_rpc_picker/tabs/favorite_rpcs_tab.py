@@ -31,7 +31,7 @@ class FavoriteRPCTable(DataTable[Any]):
 class FavoriteRPCTab(Static):
     """Tab displaying all favorited RPC URLs."""
 
-    app: "ChainRPCPicker"
+    app: "ChainRPCPicker"  # pyrefly: ignore[bad-override]
 
     BINDINGS = [
         Binding("ctrl+r", "refresh_latency", "Refresh", show=True),

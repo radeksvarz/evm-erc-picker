@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class ChainlistTab(Static):
     """View displaying the searchable list of chains from chainlist.org."""
 
-    app: "ChainRPCPicker"
+    app: "ChainRPCPicker"  # pyrefly: ignore[bad-override]
 
     BINDINGS = [
         Binding("ctrl+f", "toggle_filter_favs", "Favorite chains", show=True),
