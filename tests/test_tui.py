@@ -295,3 +295,33 @@ async def test_tab_click_no_crash():
         # We don't strictly assert the switch here if pilot.click is finicky,
         # but we MUST assert that no command palette is open (which would mean crash/bug)
         assert not app.query("CommandPalette")
+
+
+@pytest.mark.asyncio
+async def test_sensitive_mode_toggling():
+    """Test that toggling sensitive mode updates the global state and CustomHeader."""
+    app = ChainRPCPicker()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.5)
+
+        from evm_rpc_picker.widgets.custom_header import CustomHeader
+
+        header = app.screen.query_one(CustomHeader)
+
+        # Initial state: Sensitive mode should be False
+        assert not app.privacy_mode
+        assert not header.privacy_mode
+
+        # Toggle Sensitive Mode on via Ctrl+S
+        await pilot.press("ctrl+s")
+        await pilot.pause(0.2)
+
+        assert app.privacy_mode
+        assert header.privacy_mode
+
+        # Toggle off
+        await pilot.press("ctrl+s")
+        await pilot.pause(0.2)
+
+        assert not app.privacy_mode
+        assert not header.privacy_mode

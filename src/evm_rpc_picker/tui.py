@@ -54,6 +54,8 @@ class ChainRPCPicker(App[str]):
             screen = self.screen
             if hasattr(screen, "refresh_active_tab"):
                 screen.refresh_active_tab()
+            elif hasattr(screen, "update_table"):
+                screen.update_table()
 
 
 if __name__ == "__main__":

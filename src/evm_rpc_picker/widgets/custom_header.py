@@ -4,14 +4,19 @@ from typing import TYPE_CHECKING, Any
 from textual import events, on
 from textual.app import ComposeResult
 from textual.containers import Horizontal
+from textual.reactive import reactive
 from textual.widgets import Label, Tab, Tabs
 
 if TYPE_CHECKING:
-    pass
+    from ..tui import ChainRPCPicker
 
 
 class CustomHeader(Horizontal):
     """2-row header with icon, title, embedded tabs and subtitle."""
+
+    app: "ChainRPCPicker"  # pyrefly: ignore[bad-override]
+
+    privacy_mode: reactive[bool] = reactive(False)
 
     DEFAULT_CSS = """
     CustomHeader {
@@ -114,12 +119,15 @@ class CustomHeader(Horizontal):
     def on_mount(self) -> None:
         """Sync initial privacy mode state from app after mount."""
         with contextlib.suppress(Exception):
-            privacy: bool = getattr(self.app, "privacy_mode", False)
-            self._apply_privacy(privacy)
+            self.watch(self.app, "privacy_mode", self._update_privacy, init=True)
+
+    def _update_privacy(self, privacy: bool) -> None:
+        """Update reactive state of header."""
+        self.privacy_mode = privacy
 
     def on_resize(self, event: events.Resize) -> None:
         with contextlib.suppress(Exception):
-            privacy: bool = getattr(self.app, "privacy_mode", False)
+            privacy: bool = self.privacy_mode
             if event.size.width < 110:
                 self.query_one("#header-title", Label).display = False
                 self.query_one("#header-title-short", Label).display = True

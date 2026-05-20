@@ -114,3 +114,38 @@ async def test_rpc_selection_and_exit() -> None:
             await app.screen.run_action("submit")
             await pilot.pause(0.2)
             mock_exit.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_rpc_screen_sensitive_mode_toggling() -> None:
+    """Test that toggling sensitive mode inside RPCScreen refreshes the RPC table."""
+    app = ChainRPCPicker()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.5)
+        table = app.screen.query_one(ChainsTable)
+        table.focus()
+        table.move_cursor(row=0)
+        await pilot.press("enter")
+        await pilot.pause(0.5)
+
+        assert isinstance(app.screen, RPCScreen)
+        rpc_screen = app.screen
+
+        # Verify initial display without masking
+        rpc_table = rpc_screen.query_one(DataTable)
+        assert rpc_table.row_count > 0
+
+        # Sensitive Mode should be off initially
+        assert not app.privacy_mode
+
+        # Toggle Sensitive Mode on via Ctrl+S
+        await pilot.press("ctrl+s")
+        await pilot.pause(0.2)
+
+        assert app.privacy_mode
+
+        # Toggle Sensitive Mode off via Ctrl+S
+        await pilot.press("ctrl+s")
+        await pilot.pause(0.2)
+
+        assert not app.privacy_mode

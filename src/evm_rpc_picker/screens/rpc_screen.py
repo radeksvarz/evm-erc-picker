@@ -89,6 +89,13 @@ class RPCScreen(Screen[str]):
             "Fav (Global)",
             tooltip="Add/remove from global favorites",
         ),
+        Binding(
+            "ctrl+s",
+            "app.toggle_privacy",
+            "Sensitive Mode",
+            tooltip="Toggle Sensitive Mode (hide sensitive URLs and notes)",
+            show=True,
+        ),
     ]
 
     def __init__(self, chain: dict[str, Any]):
