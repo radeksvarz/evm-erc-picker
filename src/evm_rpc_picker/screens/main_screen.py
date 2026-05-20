@@ -13,8 +13,9 @@ from textual.widgets import ContentSwitcher, Footer, Tabs
 from ..commands import RefreshDataProvider
 from ..tabs.chainlist_tab import ChainlistTab
 from ..tabs.custom_rpcs_tab import CustomRPCTab
+from ..tabs.env_rpcs_tab import EnvRPCTab
 from ..tabs.favorite_rpcs_tab import FavoriteRPCTab
-from ..widgets import CustomHeader, EnvStatus
+from ..widgets import CustomHeader
 
 
 class MainScreen(Screen[str]):
@@ -36,6 +37,7 @@ class MainScreen(Screen[str]):
         Binding("ctrl+n", "switch_tab('tab-chainlist')", "Chainlist.org Tab", show=False),
         Binding("ctrl+u", "switch_tab('tab-personal')", "Personal RPC URLs Tab", show=False),
         Binding("ctrl+b", "switch_tab('tab-favorites')", "Favorite RPCs Tab", show=False),
+        Binding("ctrl+e", "switch_tab('tab-env')", "Env RPCs Tab", show=False),
         Binding(
             "ctrl+r",
             "refresh_all_data",
@@ -43,7 +45,6 @@ class MainScreen(Screen[str]):
             tooltip="from Chainlist.org",
             show=False,
         ),
-        Binding("ctrl+e", "use_current_env", "Use Current ETH_RPC_URL", show=False),
     ]
 
     def compose(self) -> ComposeResult:
@@ -52,17 +53,11 @@ class MainScreen(Screen[str]):
             yield ChainlistTab(id="tab-chainlist")
             yield CustomRPCTab(id="tab-personal")
             yield FavoriteRPCTab(id="tab-favorites")
-        yield EnvStatus(id="env-status-widget")
+            yield EnvRPCTab(id="tab-env")
         yield Footer()
 
     async def action_refresh_all_data(self) -> None:
-        """Refresh data in active tab and check ENV latency."""
-        with contextlib.suppress(Exception):
-            env_status = self.query_one(EnvStatus)
-            if env_status.current_rpc:
-                env_status.latency_label.update("--- ms")
-                env_status.check_latency()
-
+        """Refresh data in active tab."""
         self.action_delegate_to_tab("refresh_data")
 
     @on(Tabs.TabActivated)
@@ -113,20 +108,6 @@ class MainScreen(Screen[str]):
                 self.run_worker(method())
             else:
                 method()
-
-    def action_use_current_env(self) -> None:
-        """Exit with current ETH_RPC_URL if available."""
-        # This is usually only relevant in ChainlistTab, but we can check across.
-        from ..widgets.env_status import EnvStatus
-
-        try:
-            env_status = self.query_one(EnvStatus)
-            if env_status.current_rpc:
-                self.app.exit(env_status.current_rpc)
-            else:
-                self.app.notify("ETH_RPC_URL is not set", severity="warning")
-        except Exception:
-            self.app.notify("Current environment not available in this view", severity="error")
 
     def _on_rpc_selected(self, rpc_url: str | None) -> None:
         """Common callback for when any tab or sub-screen selects an RPC."""

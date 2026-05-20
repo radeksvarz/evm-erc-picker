@@ -7,9 +7,9 @@ from textual.widgets import ContentSwitcher
 
 from evm_rpc_picker.screens.main_screen import MainScreen
 from evm_rpc_picker.tabs.chainlist_tab import ChainlistTab
+from evm_rpc_picker.tabs.env_rpcs_tab import EnvRPCTab
 from evm_rpc_picker.tui import ChainRPCPicker
 from evm_rpc_picker.widgets.chains_table import ChainsTable
-from evm_rpc_picker.widgets.env_status import EnvStatus
 from evm_rpc_picker.widgets.search_input import SearchInput
 
 # Mock data
@@ -115,25 +115,45 @@ async def test_filter_toggle():
 
 
 @pytest.mark.asyncio
-async def test_env_status_widget_latency():
-    app = ChainRPCPicker()
-    async with app.run_test() as pilot:
-        await pilot.pause(0.5)
-        env_status = app.screen.query_one(EnvStatus)
-        await pilot.pause(0.5)
-        assert env_status is not None
+async def test_env_rpcs_tab_loading():
+    with patch.dict(
+        os.environ,
+        {"ETH_RPC_URL": "https://rpc.ankr.com/eth", "ANVIL_RPC_URL": "http://127.0.0.1:8545"},
+    ):
+        app = ChainRPCPicker()
+        async with app.run_test() as pilot:
+            await pilot.pause(0.5)
+            # Switch to Env RPCs tab
+            await pilot.press("ctrl+e")
+            await pilot.pause(0.5)
+
+            switcher = app.screen.query_one(ContentSwitcher)
+            assert switcher.current == "tab-env"
+
+            tab = app.screen.query_one(EnvRPCTab)
+            assert tab is not None
+            vars_present = [x["name"] for x in tab.env_rpcs]
+            assert "ETH_RPC_URL" in vars_present
+            assert "ANVIL_RPC_URL" in vars_present
 
 
 @pytest.mark.asyncio
-async def test_env_status_widget_enter_select():
-    app = ChainRPCPicker()
-    async with app.run_test() as pilot:
-        await pilot.pause(0.5)
-        env_status = app.screen.query_one(EnvStatus)
-        env_status.focus()
-        await pilot.press("enter")
-        await pilot.pause(0.2)
-        assert app.focused is not None
+async def test_env_rpcs_tab_enter_select():
+    with patch.dict(os.environ, {"ETH_RPC_URL": "https://rpc.ankr.com/eth"}):
+        app = ChainRPCPicker()
+        async with app.run_test() as pilot:
+            await pilot.pause(0.5)
+            # Switch to Env RPCs tab
+            await pilot.press("ctrl+e")
+            await pilot.pause(0.5)
+
+            tab = app.screen.query_one(EnvRPCTab)
+            tab.table.focus()
+
+            with patch.object(app, "exit") as mock_exit:
+                await pilot.press("enter")
+                await pilot.pause(0.2)
+                mock_exit.assert_called_once_with("https://rpc.ankr.com/eth")
 
 
 @pytest.mark.asyncio

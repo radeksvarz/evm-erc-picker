@@ -75,6 +75,7 @@ class CustomHeader(Horizontal):
                 Tab("Chainlist.org [^N]", id="tab-chainlist"),
                 Tab("Personal RPC URLs [^U]", id="tab-personal"),
                 Tab("★ Favorite RPCs [^B]", id="tab-favorites"),
+                Tab("Env RPCs [^E]", id="tab-env"),
                 id="main-tabs",
             )
         else:
