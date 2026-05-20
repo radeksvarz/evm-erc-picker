@@ -39,7 +39,7 @@ class CustomRPCTab(Static):
         Binding("e", "edit_rpc", "Edit RPC", show=True),
         Binding("delete", "delete_rpc", "Delete RPC", show=True),
         Binding("ctrl+v", "paste_add_rpc", "Paste & Add", show=True),
-        Binding("ctrl+b", "toggle_favorite_rpc", "Toggle Favorite", show=True),
+        Binding("ctrl+f", "toggle_favorite_rpc", "Toggle Favorite", show=True),
     ]
 
     def compose(self) -> ComposeResult:
@@ -151,7 +151,7 @@ class CustomRPCTab(Static):
             return
         is_global = selected["source"] == "global"
         self.app.config.toggle_favorite_rpc(selected.get("url", ""), is_global=is_global)
-        self.refresh_rpcs()
+        self.refresh_rpcs(highlight_rpc_id=selected.get("id"))
 
     def action_add_rpc(self) -> None:
         self._open_add_modal()
