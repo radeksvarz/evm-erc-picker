@@ -28,6 +28,15 @@ Ensure you have [uv](https://github.com/astral-sh/uv) installed.
 uvx evm-rpc-picker
 ```
 
+## One-Off Command Execution
+
+If you only want to select an RPC for a single command without modifying your current shell's `ETH_RPC_URL` environment variable, you can pass the output of `evm-rpc-picker` directly as a subshell argument:
+
+```bash
+# Run cast block-number with a freshly selected RPC
+cast block-number --rpc-url $(uvx evm-rpc-picker)
+```
+
 ## Shell Integration
 
 Add the following function to your `.bashrc` or `.zshrc` to easily export the selected RPC:
@@ -39,7 +48,14 @@ pick-rpc() {
 }
 ```
 
-After restarting your shell, simply run `pick-rpc`.
+After restarting your shell, simply run `pick-rpc` to pick and export the RPC.
+
+Since `ETH_RPC_URL` is now exported to your environment, all Foundry commands (`cast`, `forge`) will automatically pick it up without requiring manual `--rpc-url` parameters:
+
+```bash
+# Query the current block number using cast
+cast block-number
+```
 
 ## Python Usage
 
