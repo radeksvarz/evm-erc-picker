@@ -209,35 +209,92 @@ class ConfigManager:
             "secret_note": dec_note,
         }
 
-    def load_rpc_secret(self, key_name: str, password: str | None = None) -> dict[str, Any]:
-        """Load and optionally decrypt RPC secret from keyring and config.toml."""
-        rpc_entry = self._find_rpc_entry(key_name)
+    def _load_legacy_secret(self, key_name: str, password: str | None) -> dict[str, Any]:
         raw_val = self.get_secret(key_name)
-
-        if not raw_val and not rpc_entry:
+        if not raw_val:
             return {}
-
         try:
             keyring_encrypted, keyring_data = self._parse_keyring_data(raw_val)
         except ValueError:
             return {"status": "error"}
 
-        is_enc = (
-            bool(rpc_entry.get("rpc_password_protected") if rpc_entry else False)
-            or keyring_encrypted
-        )
-
-        if is_enc:
+        if keyring_encrypted:
             if not password:
                 return {"status": "needs_password", "encrypted": True}
-            return self._decrypt_all(rpc_entry, keyring_data, keyring_encrypted, password)
+            return self._decrypt_all(None, keyring_data, keyring_encrypted, password)
 
-        # If not password protected
+        return {
+            "status": "ok",
+            "encrypted": False,
+            "api_key": keyring_data.get("api_key", ""),
+            "secret_note": keyring_data.get("secret_note", ""),
+        }
+
+    def _load_password_protected_secret(
+        self, rpc_entry: dict[str, Any], key_name: str, password: str | None
+    ) -> dict[str, Any]:
+        stored_pwd = self.get_secret(key_name)
+        active_pwd = password or stored_pwd
+        if not active_pwd:
+            return {"status": "needs_password", "encrypted": True}
+
+        # Decrypt URL
+        url_enc = rpc_entry.get("url_encrypted")
+        dec_url = ""
+        if url_enc and isinstance(url_enc, dict):
+            blob, salt = url_enc.get("blob"), url_enc.get("salt")
+            if blob and salt:
+                dec_val = EncryptionManager.decrypt(blob, salt, active_pwd)
+                if dec_val is None:
+                    return {"status": "wrong_password", "encrypted": True}
+                dec_url = dec_val
+
+        # Decrypt Note
+        note_enc = rpc_entry.get("note_encrypted")
+        dec_note = ""
+        if note_enc and isinstance(note_enc, dict):
+            blob, salt = note_enc.get("blob"), note_enc.get("salt")
+            if blob and salt:
+                dec_val = EncryptionManager.decrypt(blob, salt, active_pwd)
+                if dec_val is None:
+                    return {"status": "wrong_password", "encrypted": True}
+                dec_note = dec_val
+        else:
+            dec_note = rpc_entry.get("note", "")
+
+        # Store correct password in keyring if it was supplied manually
+        if password and not stored_pwd:
+            self.set_secret(key_name, password)
+
+        return {
+            "status": "ok",
+            "encrypted": True,
+            "api_key": "",
+            "url": dec_url,
+            "secret_note": dec_note,
+        }
+
+    def load_rpc_secret(self, key_name: str, password: str | None = None) -> dict[str, Any]:
+        """Load and optionally decrypt RPC secret from keyring and config.toml."""
+        rpc_entry = self._find_rpc_entry(key_name)
+        if not rpc_entry:
+            return self._load_legacy_secret(key_name, password)
+
+        is_enc = rpc_entry.get("rpc_password_protected", False)
+        if is_enc:
+            return self._load_password_protected_secret(rpc_entry, key_name, password)
+
+        # For unencrypted custom RPCs, check if they have an API key stored in keyring
+        raw_val = self.get_secret(key_name)
+        keyring_data: dict[str, Any] = {}
+        if raw_val:
+            try:
+                _, keyring_data = self._parse_keyring_data(raw_val)
+            except ValueError:
+                pass
+
         dec_api = keyring_data.get("api_key", "")
-        dec_note = keyring_data.get("secret_note", "") or (
-            rpc_entry.get("note", "") if rpc_entry else ""
-        )
-
+        dec_note = keyring_data.get("secret_note", "") or rpc_entry.get("note", "")
         return {
             "status": "ok",
             "encrypted": False,
@@ -297,7 +354,8 @@ class ConfigManager:
         # Populate has_secrets for backward compatibility
         has_sec = item.get("has_secrets", False)
         has_note = item.get("note_in_keyring", False)
-        item["has_secrets"] = has_sec or has_note or has_secret_placeholder
+        is_enc = item.get("rpc_password_protected", False)
+        item["has_secrets"] = has_sec or has_note or has_secret_placeholder or is_enc
         return item
 
     def get_custom_rpcs(self, chain_id: int) -> list[dict[str, Any]]:
@@ -320,19 +378,11 @@ class ConfigManager:
 
         return cast(list[dict[str, Any]], local_rpcs + global_rpcs)
 
-    def add_custom_rpc(
-        self,
-        chain_id: int,
-        rpc_data: dict[str, Any],
-        is_global: bool = False,
-        password: str | None = None,
-    ) -> str:
-        """Add a custom RPC to the specified config, handling secrets."""
-        config = self.global_config if is_global else self.local_config
-
-        # 1. Handle Secrets
-        url = rpc_data.get("url", "")
-        base_url, api_key = self.smart_extract_key(url)
+    def _prepare_custom_rpc_entry(
+        self, chain_id: int, rpc_data: dict[str, Any], rpc_id: str, password: str | None = None
+    ) -> dict[str, Any]:
+        url = rpc_data.get("url", "").strip()
+        note_val = rpc_data.get("note", "").strip()
 
         # Determine if we should encrypt
         if rpc_data.get("encrypt") or password:
@@ -345,31 +395,32 @@ class ConfigManager:
             password = None
             is_encrypted = False
 
-        note_val = rpc_data.get("note", "").strip()
+        url_encrypted_data = None
         note_encrypted_data = None
-        if is_encrypted and note_val:
+        config_url = url
+        config_note = note_val
+
+        if is_encrypted:
             assert password is not None
-            blob, salt = EncryptionManager.encrypt(note_val, password)
-            note_encrypted_data = {"blob": blob, "salt": salt}
-            config_note = ""
+            # Encrypt entire URL
+            blob_url, salt_url = EncryptionManager.encrypt(url, password)
+            url_encrypted_data = {"blob": blob_url, "salt": salt_url}
+            config_url = ""
+
+            # Encrypt note if present
+            if note_val:
+                blob_note, salt_note = EncryptionManager.encrypt(note_val, password)
+                note_encrypted_data = {"blob": blob_note, "salt": salt_note}
+                config_note = ""
+
+            # Store the raw password in system keyring
+            self.set_secret(rpc_id, password)
         else:
-            config_note = note_val
-
-        rpc_id = f"rpc_{chain_id}_{int(time.time())}"
-
-        if api_key:
-            self.save_rpc_secret(rpc_id, api_key, password=password)
-
-        # 2. Save public part
-        custom_rpcs = config.get("custom_rpcs", {})
-        cid_str = str(chain_id)
-        if cid_str not in custom_rpcs:
-            custom_rpcs[cid_str] = []
-
-        if api_key:
-            config_url = base_url.replace("${API_KEY}", f"{{{{secret:{rpc_id}}}}}")
-        else:
-            config_url = url
+            # Handle legacy secrets extraction for non-password protected RPCs
+            base_url, api_key = self.smart_extract_key(url)
+            if api_key:
+                self.save_rpc_secret(rpc_id, api_key)
+                config_url = base_url.replace("${API_KEY}", f"{{{{secret:{rpc_id}}}}}")
 
         entry = {
             "id": rpc_id,
@@ -379,11 +430,34 @@ class ConfigManager:
             "network_type": rpc_data.get("network_type", "Production"),
             "rpc_password_protected": is_encrypted,
         }
+        if url_encrypted_data:
+            entry["url_encrypted"] = url_encrypted_data
         if note_encrypted_data:
             entry["note_encrypted"] = note_encrypted_data
 
+        return entry
+
+    def add_custom_rpc(
+        self,
+        chain_id: int,
+        rpc_data: dict[str, Any],
+        is_global: bool = False,
+        password: str | None = None,
+    ) -> str:
+        """Add a custom RPC to the specified config, handling secrets."""
+        config = self.global_config if is_global else self.local_config
+        rpc_id = f"rpc_{chain_id}_{int(time.time())}"
+
+        entry = self._prepare_custom_rpc_entry(chain_id, rpc_data, rpc_id, password)
+
+        # Save public part
+        custom_rpcs = config.get("custom_rpcs", {})
+        cid_str = str(chain_id)
+        if cid_str not in custom_rpcs:
+            custom_rpcs[cid_str] = []
+
         custom_rpcs[cid_str].append(entry)
-        config["custom_rpcs"] = custom_rpcs
+        config["custom_rpcs"] = self._build_custom_rpcs_table(custom_rpcs)
 
         if is_global:
             self._save_toml(self.GLOBAL_CONFIG_FILE, config, is_global=True)
@@ -422,9 +496,8 @@ class ConfigManager:
         custom_rpcs = config.get("custom_rpcs", {})
         cid_str = str(chain_id)
 
-        # 1. Handle Secrets (same as add_custom_rpc, but keep same rpc_id)
-        url = rpc_data.get("url", "")
-        base_url, api_key = self.smart_extract_key(url)
+        url = rpc_data.get("url", "").strip()
+        note_val = rpc_data.get("note", "").strip()
 
         # Determine if we should encrypt
         password = None
@@ -436,27 +509,35 @@ class ConfigManager:
         else:
             is_encrypted = False
 
-        note_val = rpc_data.get("note", "").strip()
+        url_encrypted_data = None
         note_encrypted_data = None
-        if is_encrypted and note_val:
+        config_url = url
+        config_note = note_val
+
+        if is_encrypted:
             assert password is not None
-            blob, salt = EncryptionManager.encrypt(note_val, password)
-            note_encrypted_data = {"blob": blob, "salt": salt}
-            config_note = ""
-        else:
-            config_note = note_val
+            # Encrypt entire URL
+            blob_url, salt_url = EncryptionManager.encrypt(url, password)
+            url_encrypted_data = {"blob": blob_url, "salt": salt_url}
+            config_url = ""
 
-        if api_key:
-            self.save_rpc_secret(rpc_id, api_key, password=password)
-        else:
-            # If we are removing secrets, we should delete from keyring
-            self.delete_secret(rpc_id)
+            # Encrypt note if present
+            if note_val:
+                blob_note, salt_note = EncryptionManager.encrypt(note_val, password)
+                note_encrypted_data = {"blob": blob_note, "salt": salt_note}
+                config_note = ""
 
-        # 2. Update public part
-        if api_key:
-            config_url = base_url.replace("${API_KEY}", f"{{{{secret:{rpc_id}}}}}")
+            # Store the raw password in system keyring
+            self.set_secret(rpc_id, password)
         else:
-            config_url = url
+            # Handle legacy secrets extraction for non-password protected RPCs
+            base_url, api_key = self.smart_extract_key(url)
+            if api_key:
+                self.save_rpc_secret(rpc_id, api_key)
+                config_url = base_url.replace("${API_KEY}", f"{{{{secret:{rpc_id}}}}}")
+            else:
+                # If we are removing secrets, we should delete from keyring
+                self.delete_secret(rpc_id)
 
         entry = {
             "id": rpc_id,
@@ -466,6 +547,8 @@ class ConfigManager:
             "network_type": rpc_data.get("network_type", "Production"),
             "rpc_password_protected": is_encrypted,
         }
+        if url_encrypted_data:
+            entry["url_encrypted"] = url_encrypted_data
         if note_encrypted_data:
             entry["note_encrypted"] = note_encrypted_data
 

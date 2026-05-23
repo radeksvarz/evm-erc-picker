@@ -96,34 +96,36 @@ class CustomRPCTab(Static):
             src_str = "[#89b4fa]G[/]" if is_g else "[#89b4fa]L[/]"
 
             is_fav = False
+            fav_ref = f"secret:{rpc_id}" if rpc.get("rpc_password_protected") else url
             if is_g:
-                is_fav = url in cfg.global_config.get("favorite_rpcs", [])
+                is_fav = fav_ref in cfg.global_config.get("favorite_rpcs", [])
             else:
-                is_fav = url in cfg.local_config.get("favorite_rpcs", [])
+                is_fav = fav_ref in cfg.local_config.get("favorite_rpcs", [])
 
             fav_str = "[#f9e2af]★[/]" if is_fav else " "
             ind = f"[{src_str} {fav_str} ]"
 
             url_display = url
             network_type = rpc.get("network_type", "Production")
-            note_display = ""
+            note_display = rpc.get("note", "")
             privacy: bool = getattr(self.app, "privacy_mode", False)
 
             if rpc.get("rpc_password_protected"):
-                url_display = f"[🔒] {url_display}"
                 secret_data = cfg.load_rpc_secret(rpc_id)
                 if secret_data.get("status") == "needs_password":
+                    url_display = "[🔒] Locked"
                     note_display = "[#f38ba8][🔒] Locked[/]"
                 else:
+                    url_display = secret_data.get("url", "")
                     note_display = secret_data.get("secret_note", "")
-            else:
-                note_display = rpc.get("note", "")
 
             if privacy:
-                url_display = mask_url(url)
+                url_display = mask_url(url_display)
                 if rpc.get("rpc_password_protected"):
                     url_display = f"[🔒] {url_display}"
                 note_display = "••••••••" if note_display else ""
+            elif rpc.get("rpc_password_protected"):
+                url_display = f"[🔒] {url_display}"
 
             rpc_name = rpc.get("name", "")
             self.table.add_row(
@@ -155,7 +157,10 @@ class CustomRPCTab(Static):
         if not selected:
             return
         is_global = selected["source"] == "global"
-        self.app.config.toggle_favorite_rpc(selected.get("url", ""), is_global=is_global)
+        is_encrypted = selected.get("rpc_password_protected", False)
+        rpc_id = selected.get("id")
+        val_to_toggle = f"secret:{rpc_id}" if (is_encrypted and rpc_id) else selected.get("url", "")
+        self.app.config.toggle_favorite_rpc(val_to_toggle, is_global=is_global)
         self.refresh_rpcs(highlight_rpc_id=selected.get("id"))
 
     def action_add_rpc(self) -> None:
@@ -216,25 +221,27 @@ class CustomRPCTab(Static):
         rpc_id = selected["id"]
         chain_id = selected["chain_id"]
 
-        if selected.get("has_secrets"):
-
-            def check_password(password: str | None) -> None:
-                if password is None:
-                    return
-                secret_data = self.app.config.load_rpc_secret(rpc_id, password)
-                if secret_data.get("status") == "wrong_password":
-                    self.app.notify("Invalid password", severity="error")
-                    return
+        is_encrypted = selected.get("rpc_password_protected", False) or selected.get(
+            "encrypted", False
+        )
+        if is_encrypted:
+            # Zero-Prompt UX: Try quiet keyring load first
+            secret_data = self.app.config.load_rpc_secret(rpc_id)
+            if secret_data.get("status") == "ok":
                 self._open_edit_modal(selected, secret_data, is_global, rpc_id, chain_id)
-
-            if selected.get("encrypted"):
+            else:
                 from ..screens.password_modal import PasswordModal
 
+                def check_password(password: str | None) -> None:
+                    if password is None:
+                        return
+                    res = self.app.config.load_rpc_secret(rpc_id, password)
+                    if res.get("status") == "wrong_password":
+                        self.app.notify("Invalid password", severity="error")
+                        return
+                    self._open_edit_modal(selected, res, is_global, rpc_id, chain_id)
+
                 self.app.push_screen(PasswordModal(), check_password)
-                return
-            else:
-                secret_data = self.app.config.load_rpc_secret(rpc_id)
-                self._open_edit_modal(selected, secret_data, is_global, rpc_id, chain_id)
         else:
             self._open_edit_modal(selected, {}, is_global, rpc_id, chain_id)
 
@@ -257,9 +264,6 @@ class CustomRPCTab(Static):
             ),
             "encrypted": selected.get("encrypted", False),
         }
-        api_key = secret_data.get("api_key")
-        if api_key and "${API_KEY}" in initial_data["url"]:
-            initial_data["url"] = initial_data["url"].replace("${API_KEY}", api_key)
 
         def check_edit(data: dict[str, Any] | None) -> None:
             if data is None:
@@ -311,27 +315,25 @@ class CustomRPCTab(Static):
         if not item:
             return
 
-        if item.get("encrypted"):
-            from ..screens.password_modal import PasswordModal
-
-            self.app.push_screen(PasswordModal(), lambda p: self._on_password_provided(item, p))
-        else:
-            if item.get("has_secrets"):
-                secret_data = self.app.config.load_rpc_secret(item["id"])
-                if secret_data.get("status") == "ok":
-                    url = item.get("url", "").replace("${API_KEY}", secret_data.get("api_key", ""))
-                    self._on_url_ready(url)
-                else:
-                    self.app.notify("Error loading secret", severity="error")
+        is_encrypted = item.get("rpc_password_protected", False) or item.get("encrypted", False)
+        if is_encrypted:
+            # Zero-Prompt UX: Try quiet keyring load first
+            secret_data = self.app.config.load_rpc_secret(item["id"])
+            if secret_data.get("status") == "ok":
+                self._on_url_ready(secret_data.get("url", ""))
             else:
-                self._on_url_ready(item.get("url", ""))
+                from ..screens.password_modal import PasswordModal
+
+                self.app.push_screen(PasswordModal(), lambda p: self._on_password_provided(item, p))
+        else:
+            self._on_url_ready(item.get("url", ""))
 
     def _on_password_provided(self, item: dict[str, Any], password: str | None) -> None:
         if not password:
             return
         secret_data = self.app.config.load_rpc_secret(item["id"], password=password)
         if secret_data.get("status") == "ok":
-            url = item.get("url", "").replace("${API_KEY}", secret_data.get("api_key", ""))
+            url = secret_data.get("url", "")
             self._on_url_ready(url)
         elif secret_data.get("status") == "wrong_password":
             self.app.notify("Wrong password", severity="error")

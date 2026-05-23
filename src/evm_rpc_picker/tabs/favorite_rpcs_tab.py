@@ -53,6 +53,26 @@ class FavoriteRPCTab(Static):
         self.table.add_columns("Fav", "Chain Name", "URL", "Latency")
         self.load_data()
 
+    def _find_fav_chain_name(
+        self, url: str, url_to_chain: dict[str, str], chains: list[dict[str, Any]]
+    ) -> str:
+        chain_name = url_to_chain.get(url.strip())
+        if not chain_name and url.startswith("secret:"):
+            rpc_id = url.split(":", 1)[1]
+            entry = self.app.config._find_rpc_entry(rpc_id)
+            if entry:
+                r_name = entry.get("name")
+                try:
+                    cid_str = rpc_id.split("_")[1]
+                except IndexError:
+                    cid_str = ""
+                fallback = next(
+                    (c.get("name") for c in chains if str(c.get("chainId")) == cid_str),
+                    f"Chain {cid_str}",
+                )
+                chain_name = f"{r_name} ({fallback})" if r_name else fallback
+        return chain_name or "Unknown Chain"
+
     def load_data(self) -> None:
         fav_global = {u.strip() for u in self.app.config.global_config.get("favorite_rpcs", [])}
         fav_local = {u.strip() for u in self.app.config.local_config.get("favorite_rpcs", [])}
@@ -80,12 +100,19 @@ class FavoriteRPCTab(Static):
                 )
                 for r in chain_rpcs:
                     url = str(r.get("url", "")).strip()
-                    url_to_chain[url] = str(r.get("name") or fallback)
+                    name = str(r.get("name") or fallback)
+                    if url:
+                        url_to_chain[url] = name
+                    rpc_id = r.get("id")
+                    if rpc_id:
+                        url_to_chain[f"secret:{rpc_id}"] = name
 
         self.rpc_details = {}
         for url in self.fav_urls:
+            chain_name = self._find_fav_chain_name(url, url_to_chain, chains)
+
             self.rpc_details[url] = {
-                "chain_name": url_to_chain.get(url.strip(), "Unknown Chain"),
+                "chain_name": chain_name,
                 "url": url,
                 "latency": "--- ms",
                 "is_global": url in fav_global,
@@ -93,6 +120,30 @@ class FavoriteRPCTab(Static):
             }
         self.update_table()
         self.refresh_latency()
+
+    def _get_fav_display_url(self, url: str) -> str:
+        privacy: bool = getattr(self.app, "privacy_mode", False)
+        display_url = url
+        if url.startswith("secret:"):
+            rpc_id = url.split(":", 1)[1]
+            entry = self.app.config._find_rpc_entry(rpc_id)
+            is_encrypted = entry.get("rpc_password_protected") if entry else False
+            if is_encrypted:
+                secret_data = self.app.config.load_rpc_secret(rpc_id)
+                if secret_data.get("status") == "ok":
+                    display_url = secret_data.get("url", "")
+                else:
+                    display_url = "[🔒] Locked"
+            elif entry:
+                display_url = entry.get("url", "")
+
+        if privacy:
+            display_url = mask_url(display_url)
+            if url.startswith("secret:"):
+                display_url = f"[🔒] {display_url}"
+        elif url.startswith("secret:"):
+            display_url = f"[🔒] {display_url}"
+        return display_url
 
     def update_table(self) -> None:
         if not self.is_attached:
@@ -102,7 +153,6 @@ class FavoriteRPCTab(Static):
 
         def sort_key(url: str) -> tuple[str, float]:
             d = self.rpc_details[url]
-            # Secondary sort by latency (numeric)
             import re
 
             lat_str = d["latency"]
@@ -116,7 +166,6 @@ class FavoriteRPCTab(Static):
 
         sorted_urls = sorted(self.fav_urls, key=sort_key)
         selected_index = 0
-        privacy: bool = getattr(self.app, "privacy_mode", False)
         for i, url in enumerate(sorted_urls):
             if url == selected_url:
                 selected_index = i
@@ -124,7 +173,9 @@ class FavoriteRPCTab(Static):
             g_mark = "G" if data["is_global"] else " "
             l_mark = "L" if data["is_local"] else " "
             indicator = f"[[#89b4fa]{g_mark}{l_mark}[/]  ]"
-            display_url = mask_url(url) if privacy else url
+
+            display_url = self._get_fav_display_url(url)
+
             self.table.add_row(indicator, data["chain_name"], display_url, data["latency"], key=url)
 
         if self.table.row_count > 0:
@@ -150,8 +201,19 @@ class FavoriteRPCTab(Static):
         self.app.call_from_thread(self.update_table)
 
         async def run_checks() -> None:
+            async def resolve_and_check(u: str) -> str:
+                if u.startswith("secret:"):
+                    rpc_id = u.split(":", 1)[1]
+                    secret_data = self.app.config.load_rpc_secret(rpc_id)
+                    if secret_data.get("status") == "ok":
+                        target_url = secret_data.get("url", "")
+                        if target_url:
+                            return await check_rpc_latency(target_url)
+                    return "[🔒] Locked"
+                return await check_rpc_latency(u)
+
             results = await asyncio.gather(
-                *(check_rpc_latency(u) for u in self.fav_urls), return_exceptions=True
+                *(resolve_and_check(u) for u in self.fav_urls), return_exceptions=True
             )
             for i, url in enumerate(self.fav_urls):
                 res = results[i]
@@ -162,11 +224,42 @@ class FavoriteRPCTab(Static):
 
         asyncio.run(run_checks())
 
+    def _handle_favorite_password_provided(self, rpc_id: str, pwd: str | None) -> None:
+        if not pwd:
+            return
+        res = self.app.config.load_rpc_secret(rpc_id, password=pwd)
+        if res.get("status") == "ok":
+            if hasattr(self.app.screen, "_on_rpc_selected"):
+                self.app.screen._on_rpc_selected(res.get("url", ""))
+        elif res.get("status") == "wrong_password":
+            self.app.notify("Wrong password", severity="error")
+        else:
+            self.app.notify("Error loading secret", severity="error")
+
     @on(DataTable.RowSelected)
     def on_rpc_selected_list(self, event: DataTable.RowSelected) -> None:
         url = self._get_selected_rpc_url()
-        if url and hasattr(self.app.screen, "_on_rpc_selected"):
-            self.app.screen._on_rpc_selected(url)
+        if not url:
+            return
+
+        if url.startswith("secret:"):
+            rpc_id = url.split(":", 1)[1]
+            # Try Zero-Prompt quiet load first
+            secret_data = self.app.config.load_rpc_secret(rpc_id)
+            if secret_data.get("status") == "ok":
+                decrypted_url = secret_data.get("url", "")
+                if hasattr(self.app.screen, "_on_rpc_selected"):
+                    self.app.screen._on_rpc_selected(decrypted_url)
+            else:
+                from ..screens.password_modal import PasswordModal
+
+                self.app.push_screen(
+                    PasswordModal(),
+                    lambda pwd: self._handle_favorite_password_provided(rpc_id, pwd),
+                )
+        else:
+            if hasattr(self.app.screen, "_on_rpc_selected"):
+                self.app.screen._on_rpc_selected(url)
 
     def action_toggle_global_fav(self) -> None:
         url = self._get_selected_rpc_url()

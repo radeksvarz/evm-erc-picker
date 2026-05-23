@@ -115,9 +115,13 @@ class RPCScreen(Screen[str]):
         unique_rpcs = []
         for r in rpcs:
             url = r.get("url")
-            if url and url not in seen_urls:
+            if r.get("rpc_password_protected"):
+                # Always preserve password protected custom RPCs
                 unique_rpcs.append(r)
-                seen_urls.add(url)
+            elif url:
+                if url not in seen_urls:
+                    unique_rpcs.append(r)
+                    seen_urls.add(url)
         return unique_rpcs
 
     def _gather_public_rpcs(self) -> list[dict[str, Any]]:
@@ -157,18 +161,27 @@ class RPCScreen(Screen[str]):
             c = cm.normalize_custom_rpc(c)
             url = c.get("url", "").strip()
             is_encrypted = c.get("rpc_password_protected", False)
-            has_secrets = c.get("has_secrets", False)
             rpc_id = str(c.get("id"))
             if not rpc_id:
                 continue
 
+            needs_password = is_encrypted
             display_url = url
             final_url = url
-            needs_password = is_encrypted
 
-            if has_secrets:
-                if not is_encrypted:
-                    # Try to fetch immediately
+            if is_encrypted:
+                secret_data = cm.load_rpc_secret(rpc_id)
+                if secret_data.get("status") == "ok":
+                    final_url = secret_data.get("url", "")
+                    display_url = final_url
+                    needs_password = False
+                else:
+                    final_url = ""
+                    display_url = "[🔒] Locked"
+                    needs_password = True
+            else:
+                has_secrets = c.get("has_secrets", False)
+                if has_secrets:
                     secret_data = cm.load_rpc_secret(rpc_id)
                     if secret_data.get("status") == "ok":
                         key = secret_data.get("api_key", "")
@@ -178,8 +191,6 @@ class RPCScreen(Screen[str]):
                         display_url = cm.mask_url_secrets(url, rpc_id)
                 else:
                     display_url = cm.mask_url_secrets(url, rpc_id)
-            else:
-                display_url = cm.mask_url_secrets(url, rpc_id)
 
             rpcs.append(
                 {
@@ -189,7 +200,7 @@ class RPCScreen(Screen[str]):
                     "display_url": display_url,
                     "tracking": "none",
                     "source": c.get("source", "global"),
-                    "is_secret": has_secrets,
+                    "is_secret": is_encrypted or c.get("has_secrets", False),
                     "needs_password": needs_password,
                     "note": c.get("note", ""),
                     "rpc_password_protected": is_encrypted,
@@ -293,8 +304,12 @@ class RPCScreen(Screen[str]):
         # Sort by favorite status then latency (None at the end)
         def sort_key(x: dict[str, Any]) -> tuple[int, bool, float]:
             url = x.get("url", "")
-            is_fav_local = url in fav_local
-            is_fav_global = url in fav_global
+            rpc_id = x.get("id")
+            is_enc = x.get("rpc_password_protected")
+            fav_ref = f"secret:{rpc_id}" if (is_enc and rpc_id) else url
+
+            is_fav_local = fav_ref in fav_local
+            is_fav_global = fav_ref in fav_global
 
             # Priority: Local Fav > Global Fav > Others
             priority = 0 if is_fav_local else (1 if is_fav_global else 2)
@@ -341,8 +356,12 @@ class RPCScreen(Screen[str]):
         self, d: dict[str, Any], fav_g_urls: list[str], fav_l_urls: list[str]
     ) -> str:
         url = d.get("url", "")
-        is_fav_g = url in fav_g_urls
-        is_fav_l = url in fav_l_urls
+        rpc_id = d.get("id")
+        is_enc = d.get("rpc_password_protected")
+        fav_ref = f"secret:{rpc_id}" if (is_enc and rpc_id) else url
+
+        is_fav_g = fav_ref in fav_g_urls
+        is_fav_l = fav_ref in fav_l_urls
         source = d.get("source", "")
         is_f = source == "foundry"
         is_h = source == "hardhat"
@@ -434,7 +453,7 @@ class RPCScreen(Screen[str]):
                 PasswordModal(), lambda p: self._on_password_provided(item, p)
             )
         else:
-            url = item.get("actual_url", "")
+            url = item.get("url", "")
             self.dismiss(url)
 
     def _on_password_provided(self, item: dict[str, Any], password: str | None) -> None:
@@ -449,9 +468,12 @@ class RPCScreen(Screen[str]):
         secret_data = cm.load_rpc_secret(rpc_id, password=password)
 
         if secret_data.get("status") == "ok":
-            key = secret_data.get("api_key", "")
-            url = item.get("url", "")
-            final_url = cm.resolve_url_secrets(url, rpc_id, key)
+            if item.get("rpc_password_protected"):
+                final_url = secret_data.get("url", "")
+            else:
+                key = secret_data.get("api_key", "")
+                url = item.get("url", "")
+                final_url = cm.resolve_url_secrets(url, rpc_id, key)
             self.dismiss(final_url)
         elif secret_data.get("status") == "wrong_password":
             self.picker_app.notify("Wrong password", severity="error")
@@ -462,16 +484,20 @@ class RPCScreen(Screen[str]):
         """Toggle favorite for the selected RPC (local)."""
         selected = self._get_selected_rpc()
         if selected:
-            url = selected.get("url")
-            if url:
-                self.picker_app.config.toggle_favorite_rpc(url, is_global=False)
+            is_enc = selected.get("rpc_password_protected")
+            rpc_id = selected.get("id")
+            val_to_toggle = f"secret:{rpc_id}" if (is_enc and rpc_id) else selected.get("url")
+            if val_to_toggle:
+                self.picker_app.config.toggle_favorite_rpc(val_to_toggle, is_global=False)
                 self.update_table()
 
     def action_toggle_global_favorite(self) -> None:
         """Toggle favorite for the selected RPC (global)."""
         selected = self._get_selected_rpc()
         if selected:
-            url = selected.get("url")
-            if url:
-                self.picker_app.config.toggle_favorite_rpc(url, is_global=True)
+            is_enc = selected.get("rpc_password_protected")
+            rpc_id = selected.get("id")
+            val_to_toggle = f"secret:{rpc_id}" if (is_enc and rpc_id) else selected.get("url")
+            if val_to_toggle:
+                self.picker_app.config.toggle_favorite_rpc(val_to_toggle, is_global=True)
                 self.update_table()
