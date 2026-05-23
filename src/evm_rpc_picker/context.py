@@ -85,60 +85,29 @@ class ContextDetector:
         return any(Path(f"./hardhat.config.{ext}").exists() for ext in ["js", "ts"])
 
     @staticmethod
-    def _check_strong_url(t_name: str, t_url: str, name: str, short: str) -> int | None:
-        """Helper to check for strong Alchemy/Infura URL matches."""
-
-        def hw(w: str, t: str) -> bool:
-            return re.search(rf"\b{w}\b", t.lower()) is not None
-
-        if "alchemy" not in t_url and "infura" not in t_url:
-            return None
-
-        if t_name in t_url:
-            is_eth = "eth-" in t_url or "ethereum" in t_url
-            is_e_c = hw("ethereum", name) or hw("eth", name) or short == "eth"
-            is_s_c = hw("sepolia", name) or t_name == "sepolia"
-
-            if is_eth and is_e_c and is_s_c:
-                return 1
-            if ("arb-" in t_url or "arbitrum" in t_url) and hw("arbitrum", name):
-                return 1
-            if ("base-" in t_url or "base" in t_url) and hw("base", name):
-                return 1
-        return None
-
-    @staticmethod
     def _get_chain_priority(
         t_name: str, t_url: str, name: str, short: str, aliases: dict, generic: set
     ) -> int | None:
         """Determines matching priority for a single chain."""
 
-        def has_word(w: str, text: str) -> bool:
-            return re.search(rf"\b{w}\b", text.lower()) is not None
-
         # Priority 0: Exact
         if t_name == name or t_name == short:
             return 0
 
-        # Priority 1: Strong URL Match
-        prio1 = ContextDetector._check_strong_url(t_name, t_url, name, short)
-        if prio1 is not None:
-            return prio1
-
-        # Priority 2: Alias
+        # Priority 1: Alias
         if t_name in aliases:
             if any(a == name or a == short for a in aliases[t_name]):
-                return 2
+                return 1
 
-        # Priority 3: Weak URL Match
+        # Priority 2: Weak URL Match
         if "alchemy" in t_url or "infura" in t_url:
             is_t = f"-{t_name}" in t_url or f"{t_name}-" in t_url
             if is_t and (t_name in name or t_name in short):
-                return 3
+                return 2
 
-        # Priority 4: Substring
+        # Priority 3: Substring
         if t_name not in generic and len(t_name) > 3 and t_name in name:
-            return 4
+            return 3
 
         return None
 
