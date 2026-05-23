@@ -122,6 +122,11 @@ class AddRPCModal(ModalScreen[dict]):
         margin: 0 1;
     }
 
+    #password-section {
+        height: auto;
+        width: 100%;
+    }
+
     .hidden {
         display: none;
     }
@@ -130,12 +135,19 @@ class AddRPCModal(ModalScreen[dict]):
     def compose(self) -> ComposeResult:
         with Vertical(id="add-rpc-container"):
             title = "Edit RPC" if self.is_edit else "Add Custom RPC"
+            is_encrypted = self.initial_data.get("encrypted") or self.initial_data.get(
+                "rpc_password_protected"
+            )
+            lock_prefix = "🔒 " if is_encrypted else ""
             display_name = self.initial_data.get("name") or self.chain_name
 
             if display_name and self.chain_id is not None:
-                yield Label(f"{title} - {display_name} ({self.chain_id})", classes="modal-title")
+                yield Label(
+                    f"{title} - {lock_prefix}{display_name} ({self.chain_id})",
+                    classes="modal-title",
+                )
             else:
-                yield Label(title, classes="modal-title")
+                yield Label(f"{title} {lock_prefix}".strip(), classes="modal-title")
 
             yield Label("RPC URL", classes="field-label")
             yield URLInput(

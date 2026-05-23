@@ -253,16 +253,17 @@ class CustomRPCTab(Static):
         rpc_id: str,
         chain_id: int,
     ) -> None:
+        is_encrypted = selected.get("rpc_password_protected", False) or selected.get(
+            "encrypted", False
+        )
         initial_data = {
             "name": selected.get("name", ""),
-            "url": selected.get("url", ""),
+            "url": secret_data.get("url", "") if is_encrypted else selected.get("url", ""),
             "network_type": selected.get("network_type", "Production"),
             "note": (
-                secret_data.get("secret_note", "")
-                if selected.get("encrypted")
-                else selected.get("note", "")
+                secret_data.get("secret_note", "") if is_encrypted else selected.get("note", "")
             ),
-            "encrypted": selected.get("encrypted", False),
+            "encrypted": is_encrypted,
         }
 
         def check_edit(data: dict[str, Any] | None) -> None:
