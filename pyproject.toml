@@ -1,6 +1,6 @@
 [project]
 name = "evm-rpc-picker"
-version = "0.1.1"
+version = "0.1.2"
 description = "A TUI tool to search for EVM chains, manage favorites securely, and select RPC URLs."
 authors = [{ name = "Radek Svarz", email = "evm-rpc-picker.pypi@svarz.cz" }]
 dependencies = [
