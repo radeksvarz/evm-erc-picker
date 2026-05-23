@@ -63,6 +63,43 @@ def test_toml_multiline_format(temp_config):
     assert 'note = """line1\nline2\nline3"""' in content
 
 
+def test_toml_inline_table_encryption_format(temp_config):
+    cm, _, _ = temp_config
+
+    # Add custom password-protected RPC with note
+    cm.add_custom_rpc(
+        1,
+        {
+            "url": "http://localhost:8545",
+            "name": "Anvil",
+            "note": "SecretNoteValue",
+            "password": "mypassword",
+            "rpc_password_protected": True,
+            "encrypt": True,
+        },
+        is_global=True,
+    )
+
+    # Read the raw TOML content to verify formatting
+    content = cm.GLOBAL_CONFIG_FILE.read_text()
+
+    # The note_encrypted key MUST be printed as an inline table:
+    # note_encrypted = {blob = "...", salt = "..."}
+    assert "note_encrypted = {blob = " in content
+    assert "salt = " in content
+    # Also verify that the standard table header [custom_rpcs.1.note_encrypted] does NOT exist!
+    assert "[custom_rpcs.1.note_encrypted]" not in content
+
+    # Test loading and decrypting the note back from the file to ensure full compatibility
+    custom_rpcs = cm.get_custom_rpcs(1)
+    assert len(custom_rpcs) == 1
+    rpc_id = custom_rpcs[0]["id"]
+
+    creds = cm.load_rpc_secret(rpc_id, password="mypassword")
+    assert creds["status"] == "ok"
+    assert creds["secret_note"] == "SecretNoteValue"
+
+
 def test_favorites(temp_config):
     cm, _, _ = temp_config
 

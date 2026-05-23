@@ -607,6 +607,10 @@ class ConfigManager:
                 for k, v in rpc.items():
                     if isinstance(v, str) and "\n" in v:
                         t.add(k, tomlkit.string(v, multiline=True))
+                    elif isinstance(v, dict):
+                        it = tomlkit.inline_table()
+                        it.update(v)
+                        t.add(k, it)
                     else:
                         t.add(k, v)
                 aot.append(t)
