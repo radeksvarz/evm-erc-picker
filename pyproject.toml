@@ -93,6 +93,13 @@ warn_unreachable = true
 strict_equality = true
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = false
+warn_unreachable = false
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

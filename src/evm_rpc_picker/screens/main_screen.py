@@ -1,4 +1,5 @@
 import contextlib
+import inspect
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -78,9 +79,13 @@ class MainScreen(Screen[str]):
             with contextlib.suppress(Exception):
                 tab_content = self.query_one(f"#{event.tab.id}")
                 if hasattr(tab_content, "load_data"):
-                    tab_content.load_data()
+                    res = tab_content.load_data()
+                    if inspect.isawaitable(res):
+                        self.run_worker(res)
                 elif hasattr(tab_content, "refresh_rpcs"):
-                    tab_content.refresh_rpcs()
+                    res = tab_content.refresh_rpcs()
+                    if inspect.isawaitable(res):
+                        self.run_worker(res)
 
             # Use call_after_refresh to ensure the new tab is rendered before focusing
             def focus_new_tab() -> None:
@@ -129,8 +134,14 @@ class MainScreen(Screen[str]):
         with contextlib.suppress(Exception):
             tab_content = self.query_one(f"#{switcher.current}")
             if hasattr(tab_content, "load_data"):
-                tab_content.load_data()
+                res = tab_content.load_data()
+                if inspect.isawaitable(res):
+                    self.run_worker(res)
             elif hasattr(tab_content, "refresh_rpcs"):
-                tab_content.refresh_rpcs()
+                res = tab_content.refresh_rpcs()
+                if inspect.isawaitable(res):
+                    self.run_worker(res)
             elif hasattr(tab_content, "update_table"):
-                tab_content.update_table()
+                res = tab_content.update_table()
+                if inspect.isawaitable(res):
+                    self.run_worker(res)
