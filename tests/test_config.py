@@ -355,14 +355,20 @@ def test_update_global_rpc_with_secrets(temp_config):
     cm.add_custom_rpc(1, {"url": "http://old.com"}, is_global=True)
     rpc_id = cm.get_custom_rpcs(1)[0]["id"]
 
-    # 2. Update to have secrets
-    new_data = {"url": "https://infura.io/v3/key123", "secret_note": "secret"}
+    # 2. Update to have password protection (encryption)
+    new_data = {
+        "url": "https://secure-node.com/api",
+        "note": "secret",
+        "encrypt": True,
+        "password": "mypassword",
+    }
     with patch("keyring.set_password") as mock_set:
         cm.update_custom_rpc(1, rpc_id, new_data, is_global=True)
         mock_set.assert_called_once()
 
     custom = cm.get_custom_rpcs(1)
-    assert custom[0]["url"] == f"https://infura.io/v3/{{{{secret:{rpc_id}}}}}"
+    assert custom[0]["url"] == ""
+    assert custom[0]["rpc_password_protected"] is True
     assert custom[0]["source"] == "global"
 
 

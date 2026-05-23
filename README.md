@@ -138,24 +138,25 @@ The **host/domain** remains visible so you can still identify the provider. When
 -   **Project Config**: `.rpc-picker.toml` in your project root.
 -   **Cache**: Data from `chainlist.org` is cached for 24 hours in `~/.cache/evm-rpc-picker/chains.json`.
 
-## Secure storage
+## Secure Storage & Encryption
 
-### Security and Encryption
+### Zero-Prompt AES-GCM Hybrid Encryption
 
-- All sensitive API keys are securely stored in the system keyring (macOS Keychain, Windows Vault, Linux Secret Service).
-- API keys must never be stored in plain text within configuration TOML files (use placeholder `{{secret:key-name}}`).
-- **Encrypted & Portable Notes**:
-  - Each custom RPC has a single **Note** field.
-  - If a custom RPC is **not** password-protected, the note is saved as plain text in the TOML configuration (`note` field).
-  - If a custom RPC **is** password-protected, both the URL and the note are securely **encrypted** using AES with the user's password and stored directly in the TOML configuration (`note_encrypted` field). This ensures sensitive notes remain private while making the project configuration fully portable between machines.
-- Each password-protected custom RPC is indicated by the `rpc_password_protected` flag in the configuration and a lock icon `[🔒]` in front of the URL.
-- If the keyring/password is unlocked, the app automatically measures latency for protected RPCs.
+The application features a secure, industrial-grade hybrid encryption system designed to protect your private RPC endpoints and personal notes without ruining the developer experience:
 
-### Detailed Screen (Personal RPCs)
+- **Unencrypted Custom RPCs**: Standard custom RPCs store their URLs and notes in plain-text inside the `config.toml` or `.rpc-picker.toml` configuration files.
+- **Password-Protected (Encrypted) Custom RPCs**:
+  - If password protection is enabled, the **entire URL** and the **note** are individually encrypted using **AES-256-GCM** (via `cryptography`).
+  - The encrypted payloads are saved directly inside the TOML configuration file as inline tables (`url_encrypted` and `note_encrypted`). This makes your configuration fully portable across different machines.
+  - To prevent having to type your password repeatedly, the password is automatically registered in your system's secure credential vault (macOS Keychain, Windows Credential Manager, or Linux Secret Service via `keyring`).
+  - **Zero-Prompt UX**: When selecting, editing, or performing background latency checks on an encrypted RPC, the app silently queries the keyring. If the credentials are present, it unlocks the endpoint **instantly without prompting the user**. If the credentials are missing, a secure password prompt modal will ask you for it and automatically persist it back to the keyring.
 
-- Lock icon `[🔒]` in front of the URL indicates password-protected RPCs.
-- If an RPC is password-protected, the app prompts for the password when you select or edit it.
-- A `[🔒] Locked` label in the **Note** column indicates that the note is securely encrypted and requires the password to be decrypted and viewed.
+### Security Visual Indicators
+
+- **Lock Icon `[🔒]`**: Displayed in front of password-protected RPCs in both the **Personal RPCs** and **Favorite RPCs** dashboards.
+- **Privacy Masking (`Ctrl + S`)**: When Sensitive/Privacy Mode is active:
+  - For **unlocked** encrypted RPCs, the decrypted URL and note are masked display-only (e.g., displaying `[🔒] https://mainnet.infura.io/••••••••` and `••••••••`).
+  - For **locked** encrypted RPCs, both values remain completely hidden behind the secure `[🔒] Locked` placeholder.
 
 ## Development
 

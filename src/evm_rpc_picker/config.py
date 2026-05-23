@@ -480,6 +480,23 @@ class ConfigManager:
                 return i
         return -1
 
+    def _sync_favorites_reference(self, old_fav_ref: str, new_fav_ref: str) -> None:
+        """Synchronize references in local and global favorite list if changed."""
+        if not old_fav_ref or old_fav_ref == new_fav_ref:
+            return
+
+        # Update global favorites
+        fav_g = self.global_config.get("favorite_rpcs", [])
+        if old_fav_ref in fav_g:
+            fav_g = [new_fav_ref if x == old_fav_ref else x for x in fav_g]
+            self.global_config["favorite_rpcs"] = fav_g
+
+        # Update local favorites
+        fav_l = self.local_config.get("favorite_rpcs", [])
+        if old_fav_ref in fav_l:
+            fav_l = [new_fav_ref if x == old_fav_ref else x for x in fav_l]
+            self.local_config["favorite_rpcs"] = fav_l
+
     def update_custom_rpc(
         self,
         chain_id: int,
@@ -495,6 +512,13 @@ class ConfigManager:
         config = self.global_config if is_global else self.local_config
         custom_rpcs = config.get("custom_rpcs", {})
         cid_str = str(chain_id)
+
+        old_entry = custom_rpcs[cid_str][index]
+        old_url = old_entry.get("url", "")
+        old_is_encrypted = old_entry.get("rpc_password_protected", False) or old_entry.get(
+            "encrypted", False
+        )
+        old_fav_ref = f"secret:{rpc_id}" if old_is_encrypted else old_url
 
         url = rpc_data.get("url", "").strip()
         note_val = rpc_data.get("note", "").strip()
@@ -530,14 +554,8 @@ class ConfigManager:
             # Store the raw password in system keyring
             self.set_secret(rpc_id, password)
         else:
-            # Handle legacy secrets extraction for non-password protected RPCs
-            base_url, api_key = self.smart_extract_key(url)
-            if api_key:
-                self.save_rpc_secret(rpc_id, api_key)
-                config_url = base_url.replace("${API_KEY}", f"{{{{secret:{rpc_id}}}}}")
-            else:
-                # If we are removing secrets, we should delete from keyring
-                self.delete_secret(rpc_id)
+            # If we are removing secrets, we should delete from keyring
+            self.delete_secret(rpc_id)
 
         entry = {
             "id": rpc_id,
@@ -553,13 +571,14 @@ class ConfigManager:
             entry["note_encrypted"] = note_encrypted_data
 
         custom_rpcs[cid_str][index] = entry
-        config["custom_rpcs"] = custom_rpcs
-        if is_global:
-            self._save_toml(self.GLOBAL_CONFIG_FILE, config, is_global=True)
-            self.global_config = config
-        else:
-            self._save_toml(self.LOCAL_CONFIG_FILE, config, is_global=False)
-            self.local_config = config
+        config["custom_rpcs"] = self._build_custom_rpcs_table(custom_rpcs)
+
+        # Update favorite_rpcs references if changed
+        new_fav_ref = f"secret:{rpc_id}" if is_encrypted else config_url
+        self._sync_favorites_reference(old_fav_ref, new_fav_ref)
+
+        self._save_toml(self.GLOBAL_CONFIG_FILE, self.global_config, is_global=True)
+        self._save_toml(self.LOCAL_CONFIG_FILE, self.local_config, is_global=False)
 
     def delete_custom_rpc(self, chain_id: int, rpc_id: str, is_global: bool = False) -> None:
         """Delete a custom RPC from the specified config."""

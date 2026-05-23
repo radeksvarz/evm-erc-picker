@@ -176,3 +176,46 @@ def test_favorites_reference_format(temp_config):
     cm.toggle_favorite_rpc(f"secret:{rpc_id}", is_global=True)
     fav_global = cm.global_config.get("favorite_rpcs", [])
     assert f"secret:{rpc_id}" not in fav_global
+
+
+def test_update_custom_rpc_migrates_favorites(temp_config):
+    cm, _, _ = temp_config
+
+    # 1. Add unencrypted RPC
+    cm.add_custom_rpc(
+        chain_id=1,
+        rpc_data={
+            "url": "http://localhost:8545",
+            "name": "LocalNode",
+            "note": "Public Anvil Node",
+        },
+        is_global=True,
+    )
+
+    custom_rpcs = cm.get_custom_rpcs(1)
+    rpc_id = custom_rpcs[0]["id"]
+    raw_url = "http://localhost:8545"
+
+    # Mark as favorite (stores plain url in favorite list)
+    cm.toggle_favorite_rpc(raw_url, is_global=True)
+    assert raw_url in cm.global_config.get("favorite_rpcs", [])
+
+    # 2. Update/Encrypt RPC (sets password on it)
+    with patch("keyring.set_password"):
+        cm.update_custom_rpc(
+            chain_id=1,
+            rpc_id=rpc_id,
+            rpc_data={
+                "url": "http://localhost:8545",
+                "name": "LocalNode",
+                "note": "Encrypted Anvil Node",
+                "encrypt": True,
+                "password": "mypassword",
+            },
+            is_global=True,
+        )
+
+    # 3. Verify favorite list was updated to "secret:{rpc_id}" reference instead of plain URL!
+    favs = cm.global_config.get("favorite_rpcs", [])
+    assert f"secret:{rpc_id}" in favs
+    assert raw_url not in favs
