@@ -1,5 +1,7 @@
 # EVM RPC Picker
 
+![EVM RPC Picker Screenshot](assets/screenshot.svg)
+
 A powerful TUI (Terminal User Interface) tool to search for EVM chains and manage your RPC URLs securely. It helps you quickly select and set the `ETH_RPC_URL` environment variable with the fastest available RPC, whether it's public, private, or project-specific.
 
 ## Features
